@@ -1,25 +1,17 @@
 """
-Service for managing multi-chain wallets (Solana, Ethereum Sepolia, Avalanche Fuji).
-Handles programmatic creation, loading, and balance tracking.
+Orchestrator for managing multi-chain wallets.
 """
 
-import json
 import os
 from typing import Any, Dict
 
-import base58
-from coinbase_agentkit import CdpEvmWalletProvider, CdpEvmWalletProviderConfig
 from dotenv import load_dotenv
-from solana.exceptions import SolanaRpcException
 from solana.rpc.api import Client
-from solana.rpc.types import TokenAccountOpts
-from solders.keypair import Keypair  # type: ignore
-from solders.pubkey import Pubkey
+
+from src.services.evm_wallet import EvmWallet
+from src.services.solana_wallet import SolanaWallet
 
 load_dotenv()
-
-# Solana Devnet USDC Mint
-SOLANA_USDC_MINT = "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"
 
 
 class WalletManager:
@@ -31,78 +23,30 @@ class WalletManager:
         """
         Initialize the WalletManager and load/create wallets for all chains.
         """
-        self.solana_client = Client(
+        sol_client = Client(
             os.getenv("SOLANA_RPC_URL", "https://api.devnet.solana.com"), timeout=60
         )
-        self.wallets: Dict[str, Any] = {}
-        self._initialize_wallets()
+        self.wallets: Dict[str, Any] = {
+            "solana": SolanaWallet(sol_client),
+            "sepolia": EvmWallet(
+                "ethereum-sepolia",
+                os.getenv("SEPOLIA_WALLET_DATA_FILE", "sepolia_wallet.json"),
+            ),
+            "avalanche-fuji": EvmWallet(
+                "avalanche-fuji",
+                os.getenv("FUJI_WALLET_DATA_FILE", "fuji_wallet.json"),
+                chain_id="43113",
+                rpc_url="https://avalanche-fuji.infura.io/v3/bec088a5e4bc4c459a346f52f3492252",
+            ),
+        }
         self._write_wallet_info_file()
 
-    def _initialize_wallets(self) -> None:
+    def get_address(self, network_id: str) -> str:
         """
-        Loads or creates wallets for Solana, Sepolia, and Fuji.
+        Returns the address of a wallet for a given network.
         """
-        self._init_solana()
-        sepolia_file = os.getenv("SEPOLIA_WALLET_DATA_FILE", "sepolia_wallet.json")
-        self._init_evm("sepolia", sepolia_file)
-        fuji_file = os.getenv("FUJI_WALLET_DATA_FILE", "fuji_wallet.json")
-        self._init_evm("avalanche-fuji", fuji_file)
-
-    def _init_solana(self) -> None:
-        """
-        Initializes the Solana Devnet wallet.
-        """
-        private_key_str = os.getenv("SOLANA_PRIVATE_KEY")
-        wallet_file = ".solana_wallet"
-
-        if private_key_str:
-            try:
-                keypair = Keypair.from_bytes(base58.b58decode(private_key_str))
-                self.wallets["solana"] = keypair
-            except ValueError:
-                self.wallets["solana"] = self._load_or_create_solana_file(wallet_file)
-        else:
-            self.wallets["solana"] = self._load_or_create_solana_file(wallet_file)
-
-    def _load_or_create_solana_file(self, file_path: str) -> Keypair:
-        """
-        Loads a Solana keypair from a file or creates a new one.
-        """
-        if os.path.exists(file_path):
-            with open(file_path, "rb") as f:
-                keypair = Keypair.from_bytes(f.read())
-        else:
-            keypair = Keypair()
-            with open(file_path, "wb") as f:
-                f.write(bytes(keypair))
-        return keypair
-
-    def _init_evm(self, network_id: str, data_file: str) -> None:
-        """
-        Initializes an EVM wallet using Coinbase CDP via AgentKit.
-        """
-        try:
-            api_key_name = os.getenv("CDP_API_KEY_NAME")
-            raw_key = os.getenv("CDP_API_KEY_PRIVATE_KEY", "").replace("\\n", "\n")
-
-            wallet_secret = None
-            if os.path.exists(data_file):
-                with open(data_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    wallet_secret = data.get("wallet_secret")
-
-            config = CdpEvmWalletProviderConfig(
-                api_key_id=api_key_name,
-                api_key_secret=raw_key,
-                network_id=network_id,
-                wallet_secret=wallet_secret,
-            )
-
-            provider = CdpEvmWalletProvider(config)
-            self.wallets[network_id] = provider
-
-        except (ValueError, KeyError, TypeError):
-            pass
+        wallet = self.wallets.get(network_id)
+        return wallet.get_address() if wallet else "ERROR"
 
     def _write_wallet_info_file(self) -> None:
         """
@@ -112,23 +56,22 @@ class WalletManager:
         info += "Use the following to fund wallets\n"
         info += "with testnet Native tokens and USDC.\n\n"
 
-        sol_kp = self.wallets.get("solana")
-        sol_addr = sol_kp.pubkey() if isinstance(sol_kp, Keypair) else "ERROR"
-        sol_priv = (
-            base58.b58encode(bytes(sol_kp)).decode()
-            if isinstance(sol_kp, Keypair)
-            else "ERROR"
-        )
-
+        # Solana
+        sol = self.wallets.get("solana")
         info += "### Solana Devnet\n"
-        info += f"- **Address:** `{sol_addr}`\n"
-        info += f"- **Private Key:** `{sol_priv}`\n"
+        if isinstance(sol, SolanaWallet):
+            info += f"- **Address:** `{sol.get_address()}`\n"
+            info += f"- **Private Key:** `{sol.get_private_key_b58()}`\n"
+        else:
+            info += "- **Address:** `ERROR`\n"
+            info += "- **Private Key:** `ERROR`\n"
         info += "- **Faucet:** [Solana Faucet](https://faucet.solana.com/)\n\n"
 
+        # EVM
         for network in ["sepolia", "avalanche-fuji"]:
-            provider = self.wallets.get(network)
-            addr = provider.get_address() if provider else "ERROR"
+            wallet = self.wallets.get(network)
             info += f"### {network.capitalize()}\n"
+            addr = wallet.get_address() if isinstance(wallet, EvmWallet) else "ERROR"
             info += f"- **Address:** `{addr}`\n"
             info += "- **Faucet:** [Coinbase Faucet]"
             info += "(https://www.coinbase.com/faucets)\n\n"
@@ -139,55 +82,8 @@ class WalletManager:
         with open("WALLETS.md", "w", encoding="utf-8") as f:
             f.write(info)
 
-    def get_wallet_address(self, network_id: str) -> str:
-        """
-        Returns the address of a wallet for a given network.
-        """
-        provider = self.wallets.get(network_id)
-        if provider and hasattr(provider, "get_address"):
-            return str(provider.get_address())
-        if provider and hasattr(provider, "pubkey"):
-            return str(provider.pubkey())
-        return "ERROR"
-
     def get_balances(self) -> Dict[str, Dict[str, float]]:
         """
         Fetches balances for all wallets.
         """
-        balances = {}
-
-        if "solana" in self.wallets:
-            try:
-                kp = self.wallets["solana"]
-                if isinstance(kp, Keypair):
-                    sol_balance = (
-                        self.solana_client.get_balance(kp.pubkey()).value / 10**9
-                    )
-                    usdc_pubkey = Pubkey.from_string(SOLANA_USDC_MINT)
-                    token_accounts = self.solana_client.get_token_accounts_by_owner(
-                        kp.pubkey(), TokenAccountOpts(mint=usdc_pubkey)
-                    )
-
-                    usdc_balance = 0.0
-                    if token_accounts.value:
-                        account_pubkey = token_accounts.value[0].pubkey
-                        account_info = self.solana_client.get_token_account_balance(
-                            account_pubkey
-                        )
-                        if account_info.value and account_info.value.ui_amount:
-                            usdc_balance = float(account_info.value.ui_amount)
-
-                    balances["solana"] = {"native": sol_balance, "usdc": usdc_balance}
-            except (SolanaRpcException, ValueError):
-                balances["solana"] = {"native": 0.0, "usdc": 0.0}
-
-        for network in ["sepolia", "avalanche-fuji"]:
-            if network in self.wallets:
-                try:
-                    provider = self.wallets[network]
-                    native_balance = float(provider.get_balance() or 0.0) / 10**18
-                    balances[network] = {"native": native_balance, "usdc": 0.0}
-                except (ValueError, TypeError, RuntimeError):
-                    balances[network] = {"native": 0.0, "usdc": 0.0}
-
-        return balances
+        return {name: wallet.get_balances() for name, wallet in self.wallets.items()}
