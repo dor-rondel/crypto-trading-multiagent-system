@@ -200,12 +200,6 @@ class EvmWallet(BaseWallet):
         )
         return provider
 
-    def _save_wallet_secret(self, wallet_data: str) -> None:
-        """Saves the wallet secret to the data file."""
-        logger.info("Saving updated wallet secret to %s", self.data_file)
-        with open(self.data_file, "w", encoding="utf-8") as f:
-            json.dump({"wallet_secret": wallet_data}, f)
-
     def get_balances(self) -> Dict[str, float]:
         """
         Fetches native and USDC balances for the EVM wallet.
