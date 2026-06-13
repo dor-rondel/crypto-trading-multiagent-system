@@ -26,6 +26,7 @@ dev = [
     "codespell",
     "pytest-asyncio>=1.4.0",
     "mypy>=2.1.0",
+    "langgraph-cli[inmem]",
 ]
 
 [tool.ruff]

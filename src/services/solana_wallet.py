@@ -111,11 +111,29 @@ class SolanaWallet(BaseWallet):
                 )
                 if balance_res.value and balance_res.value.ui_amount:
                     usdc_balance = float(balance_res.value.ui_amount)
-
         except Exception as e:
-            logger.warning("Failed to fetch Solana balances: %s", e)
+            logger.error("Failed to fetch Solana balances: %s", e)
+            return {"native": 0.0, "usdc": 0.0}
 
         return {"native": sol_balance, "usdc": usdc_balance}
+
+    async def swap_usdc_for_token(self, amount_usdc: float, token_symbol: str) -> str:
+        """
+        Mock swap on Solana Devnet.
+        """
+        logger.info(
+            "MOCK: Swapping %.2f USDC for %s on Solana", amount_usdc, token_symbol
+        )
+        return "sol-mock-tx-hash-buy"
+
+    async def swap_token_for_usdc(self, amount_token: float, token_symbol: str) -> str:
+        """
+        Mock swap on Solana Devnet.
+        """
+        logger.info(
+            "MOCK: Swapping %.2f %s for USDC on Solana", amount_token, token_symbol
+        )
+        return "sol-mock-tx-hash-sell"
 
     def get_address(self) -> str:
         """Returns the public address."""

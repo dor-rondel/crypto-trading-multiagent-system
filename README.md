@@ -43,15 +43,22 @@ Real market data is used to generate trading signals, while all trade execution 
 ### Infrastructure
 
 - Python 3.12+
-- PostgreSQL (for workflow persistence)
+- SQLite (for workflow persistence)
 
 ---
 
 ## Architecture
 
-### High-Level Flow
+### Modular LangGraph Workflow
+The system uses a decoupled LangGraph architecture to separate reasoning from execution:
 
-Market Watcher (Batched) → Signal Generated → Planner Agent → Structured Plan → Validator → Executor → Transaction Monitor → Portfolio Manager
+- **Planner Agent (`src/agents/planner.py`):** Uses Groq (Llama 3) to analyze market data and portfolio state, generating a structured `TradePlan`.
+- **Risk Validator (`src/services/risk_validator.py`):** A deterministic node that enforces balance constraints, maximum trade limits, and slippage guardrails.
+- **Trade Executor (`src/workflows/nodes.py`):** Dispatches validated actions to chain-specific wallet adapters.
+
+### Prompts & State
+- **Prompts:** Managed in `src/prompts/` to ensure clean separation of LLM instructions from logic.
+- **State:** Strongly typed `AgentState` defined in `src/workflows/state.py`.
 
 **Note on Market Data:** The `MarketWatcher` service aggregates price snapshots from all configured providers before emitting a single consolidated signal. This ensures that the agent is triggered only once per polling interval with a complete view of the market, effectively preventing redundant agent executions and inefficient resource usage.
 
@@ -74,14 +81,6 @@ The Wallet Manager, Chain Adapters, and Portfolio Manager must remain determinis
 ### Three-Wallet USDC Strategy
 The system maintains a USDC "bank" on each supported chain. All trades are simulated by swapping USDC for assets and back, ensuring a consistent base currency for performance tracking. Solana balances are fetched from the devnet token account, and EVM balances are queried programmatically from the official Sepolia and Avalanche Fuji USDC token contract addresses using `read_contract` calls.
 
-### Initialization & Funding
-Upon first run, the system creates necessary wallets and generates a `WALLETS.md` file (ignored by git). This file contains public addresses, private keys (for testnet convenience), and faucet links. The system will poll for balances and wait until at least one wallet is funded before proceeding.
-
-### Subsequent Runs & Persistence
-The system automatically loads existing wallets from `.solana_wallet`, `sepolia_wallet.json`, and `fuji_wallet.json` if they exist in the root directory.
-*   **Do not** rely on environment variables (`SOLANA_PRIVATE_KEY`) after initial setup, as they are only used for bootstrapping.
-*   Check `WALLETS.md` for addresses if you need to re-fund.
-
 ---
 
 ## Development
@@ -99,15 +98,23 @@ The system automatically loads existing wallets from `.solana_wallet`, `sepolia_
 make install
 ```
 
+### Visualization
+Generate a visual map of the trading graph:
+```bash
+make graph
+```
+
+### Interactive Debugging
+Run the LangGraph dev server to use LangGraph Studio:
+```bash
+uv run langgraph dev
+```
+
 ### Run Quality Checks
 
 ```bash
 # Run comprehensive format check, ruff check, pylint, mypy, pytest, and codespell
 make check
-
-# Or run just formatting or linter checks individually
-make format
-make lint
 ```
 
 ### Run Tests
@@ -127,8 +134,8 @@ Ensure your `.env` file is configured with the necessary API keys and RPC URLs (
 
 ### Roadmap
 - **Phase 1: Foundation** (Completed)
-- **Phase 2: Agentic Trading** (In Progress)
-- **Phase 3: Orchestration**
+- **Phase 2: Agentic Trading** (Completed - Functional Chain Verified)
+- **Phase 3: Real Execution & Persistence** (Next)
 - **Phase 4: Advanced Features**
 
 ### Backlog
@@ -136,4 +143,3 @@ Ensure your `.env` file is configured with the necessary API keys and RPC URLs (
 - **RPC Connectivity:** Introduce automatic RPC endpoint fallbacks for chain connectivity to mitigate bottlenecks and ensure reliable transaction submission during high network congestion.
 - **Agent Enhancements:** Integrate real-time sentiment analysis, expand asset support, and implement advanced risk management strategies for better decision-making.
 - **Backtesting & Simulation:** Develop a backtesting engine to evaluate strategies against historical data before deployment on testnets.
-

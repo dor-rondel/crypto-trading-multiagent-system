@@ -1,4 +1,4 @@
-.PHONY: install format lint test spell check clean
+.PHONY: install format lint test graph spell check clean
 
 PYTHON ?= uv run python
 SRC_DIR := src
@@ -17,6 +17,9 @@ lint:
 
 test:
 	uv run pytest $(TEST_DIR)
+
+graph:
+	PYTHONPATH=. uv run python scripts/generate_graph.py
 
 spell:
 	uv run codespell .
