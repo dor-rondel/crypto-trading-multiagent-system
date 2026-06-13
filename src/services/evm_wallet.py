@@ -217,13 +217,15 @@ class EvmWallet(BaseWallet):
         """
         Fetches native and USDC balances for the EVM wallet.
         """
+        native_balance = 0.0
         try:
             native_balance = float(self.provider.get_balance() or 0.0) / 10**18
         except Exception as e:
-            logger.warning(
+            logger.error(
                 "Failed to fetch native balance for %s: %s", self.network_id, e
             )
-            native_balance = 0.0
+            # We return 0.0 and continue, so the agent doesn't trade this chain
+            return {"native": 0.0, "usdc": 0.0}
 
         usdc_balance = 0.0
         usdc_address = EVM_USDC_CONTRACTS.get(self.network_id)
@@ -237,11 +239,37 @@ class EvmWallet(BaseWallet):
                 )
                 usdc_balance = float(balance_units) / 10**6
             except Exception as e:
-                logger.warning(
+                logger.error(
                     "Failed to fetch USDC balance for %s: %s", self.network_id, e
                 )
+                # Keep native, but zero out USDC if it specifically fails
+                usdc_balance = 0.0
 
         return {"native": native_balance, "usdc": usdc_balance}
+
+    async def swap_usdc_for_token(self, amount_usdc: float, token_symbol: str) -> str:
+        """
+        Mock swap on EVM.
+        """
+        logger.info(
+            "MOCK: Swapping %.2f USDC for %s on %s",
+            amount_usdc,
+            token_symbol,
+            self.network_id,
+        )
+        return f"evm-{self.network_id}-mock-tx-hash-buy"
+
+    async def swap_token_for_usdc(self, amount_token: float, token_symbol: str) -> str:
+        """
+        Mock swap on EVM.
+        """
+        logger.info(
+            "MOCK: Swapping %.2f %s for USDC on %s",
+            amount_token,
+            token_symbol,
+            self.network_id,
+        )
+        return f"evm-{self.network_id}-mock-tx-hash-sell"
 
     def get_address(self) -> str:
         """Returns the address of the EVM wallet."""

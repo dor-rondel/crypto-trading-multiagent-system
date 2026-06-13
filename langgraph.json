@@ -1,0 +1,9 @@
+{
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "trading": "./src/workflows/graph.py:trading_app"
+  },
+  "env": ".env"
+}

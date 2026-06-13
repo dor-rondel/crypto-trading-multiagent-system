@@ -22,25 +22,11 @@ Supported chains:
 
 The system follows a strict separation between planning and execution.
 
-### Agents Generate Plans
-
-Agents produce structured output using Pydantic models to ensure validation and type safety.
-
-Example Plan Model:
-
-```python
-from pydantic import BaseModel, Field
-from typing import List
-
-class Action(BaseModel):
-    action: str = Field(..., description="BUY or SELL")
-    asset: str = Field(..., description="Asset symbol e.g. ETH")
-    allocation_pct: float = Field(..., ge=0, le=1)
-
-class TradePlan(BaseModel):
-    plan_type: str = "trade"
-    actions: List[Action]
-```
+### Modular Workflows
+- **Architecture:** Decouple reasoning from execution using LangGraph. Maintain separate files for nodes, state, and graph definitions.
+- **Prompts:** All LLM prompts must reside in `src/prompts/`. Do not hardcode prompts in agent classes.
+- **Models:** Use Pydantic models for all inter-node communication (e.g., `TradePlan`, `TradeAction`).
+- **Validation:** Every trade plan must pass through a deterministic `RiskValidator` before execution.
 
 ### Executors Execute Plans
 
@@ -65,6 +51,7 @@ The system maintains three distinct wallets, one for each supported chain.
 
 Wallets should be loaded from environment variables. If not found, they must be created programmatically.
 
+- **Persistence:** Ensure that mock data (e.g., balance fallbacks) is never persisted to wallet data files.
 - **EVM:** `AgentKit/CDP` handles wallet persistence. Credentials should be stored in `.env` (API Keys) and wallet data in `*_wallet.json` files.
 - **Solana:** The system must generate a keypair if one is not provided in `.env` and store it in a `.solana_wallet` file for future sessions.
 
@@ -75,17 +62,13 @@ The system operates in two distinct polling stages during startup:
 1. **Stage 1: Funding Poll:** The main script polls for native/USDC balances. It will wait indefinitely until at least one wallet is funded. Instructions are provided in `WALLETS.md`.
 2. **Stage 2: Market Poll:** Once funds are detected, the system enters its active loop, polling market data providers for signals to trigger the Planner Agent.
 
-### Security
+---
+
+## Security
 
 - Agents never see private keys.
 - Private keys/CDP credentials must never be logged or committed.
 - Wallets are strictly for testnet use.
-
----
-
-## No Agent-Driven Transaction Construction
-
-Agents propose actions; deterministic services (using AgentKit or solana-py) construct and sign transactions.
 
 ---
 
@@ -97,91 +80,39 @@ Workflows should persist state and sleep while waiting.
 
 ---
 
-## Workflow Philosophy
-
-A workflow is not a continuously running agent.
-A workflow is a state machine: Start → Generate Plan → Validate → Execute → Wait → Resume → Complete.
-
----
-
 # Component Responsibilities
 
 ## Wallet Manager
 
-Responsibilities:
-
-- Programmatically create/load wallets for all three chains. All wallets must implement the unified interface of `BaseWallet` (`src/services/base_wallet.py`).
-- Fetch balances for native tokens and USDC. EVM wallet balances must fetch real USDC balances via contract `read_contract` calls rather than returning 0.0 placeholders.
-- Provide wallet addresses for funding.
+- Programmatically create/load wallets for all three chains.
+- All wallets must implement the unified interface of `BaseWallet`.
+- Fetch balances for native tokens and USDC.
 
 ## Market Watcher
 
-Responsibilities:
-
 - Poll market data providers (e.g., CoinGecko, Binance).
-- **Batching:** Aggregate price snapshots from all configured providers before emitting a single consolidated signal to avoid redundant agent executions.
-- **Robustness & Error Handling:** 
-  - **Partial Failures:** If an individual provider call fails, log the error but continue to aggregate data from successful providers. The system must not block execution unless all provider calls fail.
-  - **Total Failures:** If all providers fail, the system must log an error and skip triggering the agent to prevent passing invalid, empty, or zero-value data.
-  - **Data Integrity:** Providers must return validated `MarketSnapshot` objects. Invalid API responses should result in a `None` return, which the `MarketWatcher` will correctly filter out.
-- Detect trading signals and emit events.
-  Must not execute trades or modify portfolios.
+- **Batching:** Aggregate price snapshots from all configured providers before emitting a single consolidated signal.
 
 ## Planner Agent
 
-Responsibilities:
-
 - Analyze market state and portfolio state.
 - Generate plans using structured output.
-  Must not perform execution or sign transactions.
 
 ## Validator
-
-Responsibilities:
 
 - Verify balances, wallet availability, position limits, and chain health.
   Must remain deterministic.
 
 ## Executor
 
-Responsibilities:
-
 - Execute plans and submit transactions.
-- Track transaction identifiers.
-  Must not create strategy.
-
-## Transaction Monitor
-
-Responsibilities:
-
-- Poll chain state and verify confirmations/failures.
-- Emit workflow events.
-  Must not contain LLM logic.
-
-## Portfolio Manager
-
-Responsibilities:
-
-- Track balances, positions, reserved capital, and workflow ownership.
   Must remain deterministic.
-
----
-
-# Multi-Workflow Execution
-
-Multiple workflows may execute simultaneously (e.g., Workflow A buys ETH, Workflow B buys AVAX). The system must support concurrent execution.
-
----
-
-# Capital Reservation
-
-Before execution, workflows reserve funds to prevent race conditions. Subsequent workflows must respect these reservations.
 
 ---
 
 # Persistence Requirements
 
-Workflow state, pending transactions, plans, portfolio state, and reservations must be recoverable. System restarts must not lose active workflows.
+Workflow state, pending transactions, plans, portfolio state, and reservations must be recoverable. SQLite is used for local workflow persistence via LangGraph checkpointers.
 
 ---
 
@@ -190,48 +121,5 @@ Workflow state, pending transactions, plans, portfolio state, and reservations m
 - All public classes, functions, and modules require docstrings.
 - Type hints are required.
 - Use Pydantic models or dataclasses over generic dictionaries.
-- **Standard Logging:** Use Python's standard `logging.getLogger(__name__)` library to trace initialization, RPC activities, and handle failures gracefully. Private keys or API secrets must never be logged.
-- **Mandatory Quality Checks:** Before finalizing any task, run `make check` (which comprehensively runs format checks, lints, type checks, unit tests, and spellchecks). All quality checks must pass before reporting the task as complete.
-
----
-
-# Testing Philosophy
-
-- Every planner decision must be testable independently without blockchain access.
-- Executors and monitors must be testable with mocked chain responses.
-- Favor deterministic tests.
-
----
-
-# Preferred Repository Structure
-
-```text
-src/
-├── agents/
-├── workflows/
-├── services/
-├── chains/
-├── models/
-├── events/
-├── persistence/
-├── monitoring/
-└── tests/
-```
-
----
-
-# Future Roadmap & Backlog
-
-## Roadmap
-
-- **Phase 1: Foundation** (Completed)
-- **Phase 2: Agentic Trading** (In Progress)
-- **Phase 3: Orchestration**
-- **Phase 4: Advanced Features**
-
-## Backlog
-
-- **Market Data Resilience:** Implement a Binance API fallback in the `MarketWatcher` to ensure service continuity if CoinGecko experiences downtime.
-- **RPC Connectivity:** Introduce automatic RPC endpoint fallbacks for chain connectivity to mitigate bottlenecks and ensure reliable transaction submission during high network congestion.
-- **Agent Enhancements:** Integrate real-time sentiment analysis, expand asset support, and implement advanced risk management strategies for better decision-making.
-- **Backtesting & Simulation:** Develop a backtesting engine to evaluate strategies against historical data before deployment on testnets.
+- **Standard Logging:** Use Python's standard `logging.getLogger(__name__)`.
+- **Mandatory Quality Checks:** Before finalizing any task, run `make check`.

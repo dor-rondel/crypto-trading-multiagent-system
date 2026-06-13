@@ -22,3 +22,15 @@ class BaseWallet(ABC):
         """
         Fetches the native and USDC balances for the wallet.
         """
+
+    @abstractmethod
+    async def swap_usdc_for_token(self, amount_usdc: float, token_symbol: str) -> str:
+        """
+        Swaps USDC for a target token. Returns transaction hash/id.
+        """
+
+    @abstractmethod
+    async def swap_token_for_usdc(self, amount_token: float, token_symbol: str) -> str:
+        """
+        Swaps a token for USDC. Returns transaction hash/id.
+        """

@@ -25,3 +25,6 @@ build/
 .solana_wallet
 *_wallet.json
 WALLETS.md
+
+# Graph
+.langgraph_api/

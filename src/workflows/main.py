@@ -1,75 +1,20 @@
-# pylint: disable=fixme
-
 """
-Main workflow entry point for the crypto trading agent.
-Initializes services and orchestrates the Plan → Validate → Execute flow.
+Main entry point for the crypto trading agent.
 """
 
 import asyncio
 import logging
-from typing import Annotated, Dict, Optional, TypedDict
-
-from langgraph.graph import END, StateGraph
+from typing import Dict
 
 from src.events.market_signal import MarketSnapshot
 from src.monitoring.logging_config import setup_logging
 from src.services.market_watcher import MarketWatcher
 from src.services.wallet_manager import WalletManager
+from src.workflows.graph import trading_app
 
 # Setup logging
 setup_logging()
 logger = logging.getLogger(__name__)
-
-
-class AgentState(TypedDict):
-    """
-    Represents the state of the agent workflow.
-    """
-
-    messages: Annotated[list[str], "The messages in the conversation"]
-    portfolio_balances: Dict[str, Dict[str, float]]
-    market_snapshot: Optional[MarketSnapshot]
-    next_step: str
-
-
-def planner(state: AgentState) -> AgentState:
-    """
-    Plan the next trading action based on market signals and portfolio state.
-    """
-    snapshot = state.get("market_snapshot")
-    if snapshot:
-        assets_info = ", ".join(
-            [f"{a}: ${p.price:.2f}" for a, p in snapshot.assets.items()]
-        )
-        print(f"\n[PLANNER] Analyzing snapshot: {assets_info}")
-    else:
-        print("\n[PLANNER] No market data provided.")
-
-    # TODO: Integrate Groq for LLM planning # noqa
-    state["next_step"] = "validator"
-    return state
-
-
-def validator(state: AgentState) -> AgentState:
-    """
-    Validate the proposed plan against deterministic constraints.
-    """
-    print("[VALIDATOR] Validating plan constraints...")
-    # pylint: disable=all
-    # TODO: Implement deterministic validation
-    # pylint: enable=all
-    state["next_step"] = "executor"
-    return state
-
-
-def executor(state: AgentState) -> AgentState:
-    """
-    Execute the validated plan using chain-specific adapters.
-    """
-    print("[EXECUTOR] Executing trade actions...")
-    # TODO: Implement execution logic
-    state["next_step"] = END
-    return state
 
 
 async def wait_for_funding(wm: WalletManager) -> Dict[str, Dict[str, float]]:
@@ -98,22 +43,6 @@ async def wait_for_funding(wm: WalletManager) -> Dict[str, Dict[str, float]]:
         await asyncio.sleep(30)
 
 
-# Define the graph
-workflow = StateGraph(AgentState)
-
-workflow.add_node("planner", planner)
-workflow.add_node("validator", validator)
-workflow.add_node("executor", executor)
-
-workflow.set_entry_point("planner")
-
-workflow.add_edge("planner", "validator")
-workflow.add_edge("validator", "executor")
-workflow.add_edge("executor", END)
-
-app = workflow.compile()
-
-
 async def main() -> None:
     """
     Main entry point.
@@ -135,12 +64,14 @@ async def main() -> None:
         Callback to trigger the workflow on new market snapshots.
         """
         print(f"\n🔔 New Market Snapshot from {snapshot.source}")
-        await app.ainvoke(
+        await trading_app.ainvoke(
             {
                 "messages": ["New market data received"],
                 "portfolio_balances": await wm_instance.get_balances(),
                 "market_snapshot": snapshot,
                 "next_step": "",
+                "plan": None,
+                "approved_actions": [],
             }
         )
 

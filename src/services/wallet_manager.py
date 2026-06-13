@@ -112,3 +112,20 @@ class WalletManager:
         for name, wallet in self.wallets.items():
             results[name] = await wallet.get_balances()
         return results
+
+    async def execute_swap(
+        self, network_id: str, direction: str, amount: float, asset: str
+    ) -> str:
+        """
+        Executes a swap on a specific network.
+        """
+        wallet = self.wallets.get(network_id)
+        if not wallet:
+            raise ValueError(f"No wallet found for network: {network_id}")
+
+        if direction.lower() == "buy":
+            return await wallet.swap_usdc_for_token(amount, asset)
+        if direction.lower() == "sell":
+            return await wallet.swap_token_for_usdc(amount, asset)
+
+        raise ValueError(f"Unsupported swap direction: {direction}")
