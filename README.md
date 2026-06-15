@@ -78,6 +78,20 @@ All SQL queries are centralized in `src/persistence/queries.py` and use paramete
 
 ---
 
+## Wallet Management & Capital
+
+### Three-Wallet Strategy
+The system maintains three distinct wallets, one for each supported chain.
+- Each wallet uses **USDC** as its base "bank" currency.
+- **Gas Requirements:** Each wallet must be funded with a small amount of the chain's native testnet token (SOL, ETH, or AVAX) to cover gas fees for swaps.
+- Trades are simulated by swapping USDC for the target asset and back.
+
+### Initialization: Two-Stage Polling
+1. **Stage 1: Funding Poll:** The main script polls for native/USDC balances. It will wait indefinitely until at least one wallet is funded. Instructions are provided in `WALLETS.md`.
+2. **Stage 2: Market Poll:** Once funds are detected, the system enters its active loop, polling market data providers for signals to trigger the Planner Agent.
+
+---
+
 ## Development
 
 ### Prerequisites
