@@ -1,8 +1,10 @@
-from unittest.mock import AsyncMock, MagicMock, mock_open, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
 from src.services.evm_wallet import EvmWallet
+
+VALID_ADDRESS = "0xAeFA19DC8f5442057c553D0390399DD915138ea0"
 
 
 @pytest.fixture
@@ -16,7 +18,7 @@ async def mock_wallet():
         patch("builtins.open", mock_open(read_data='{"name": "a", "privateKey": "b"}')),
     ):
         mock_provider = MagicMock()
-        mock_provider.get_address.return_value = "0x123"
+        mock_provider.get_address.return_value = VALID_ADDRESS
         # Since we use run_in_executor, we need to mock the constructor return
         mock_provider_class.return_value = mock_provider
 
@@ -27,7 +29,7 @@ async def mock_wallet():
 
 @pytest.mark.asyncio
 async def test_get_address(mock_wallet):
-    assert mock_wallet.get_address() == "0x123"
+    assert mock_wallet.get_address() == VALID_ADDRESS
 
 
 @pytest.mark.asyncio
@@ -35,13 +37,9 @@ async def test_get_balances_success(mock_wallet):
     mock_wallet.provider.get_balance.return_value = 1 * 10**18  # 1 ETH
     mock_wallet.provider.read_contract.return_value = 100 * 10**6  # 100 USDC
 
-    # Patch Web3.to_checksum_address to just return the input
-    with patch(
-        "src.services.evm_wallet.Web3.to_checksum_address", side_effect=lambda x: x
-    ):
-        balances = await mock_wallet.get_balances()
-        assert balances["native"] == 1.0
-        assert balances["usdc"] == 100.0
+    balances = await mock_wallet.get_balances()
+    assert balances["native"] == 1.0
+    assert balances["usdc"] == 100.0
 
 
 @pytest.mark.asyncio
@@ -59,14 +57,11 @@ async def test_swap_usdc_for_token_success(mock_wallet):
     # Patch Web3 and contract
     with (
         patch("src.services.evm_wallet.Web3") as mock_web3,
-        patch(
-            "src.services.evm_wallet.Web3.to_checksum_address", side_effect=lambda x: x
-        ),
     ):
         mock_web3.return_value.eth.contract.return_value.encode_abi.return_value = (
             b"data"
         )
-        mock_wallet.provider.send_transaction = AsyncMock(return_value="tx_hash_123")
+        mock_wallet.provider.send_transaction.return_value = "tx_hash_123"
 
         tx_hash = await mock_wallet.swap_usdc_for_token(10.0, "ETH")
 
@@ -79,14 +74,11 @@ async def test_swap_token_for_usdc_success(mock_wallet):
     # Patch Web3 and contract
     with (
         patch("src.services.evm_wallet.Web3") as mock_web3,
-        patch(
-            "src.services.evm_wallet.Web3.to_checksum_address", side_effect=lambda x: x
-        ),
     ):
         mock_web3.return_value.eth.contract.return_value.encode_abi.return_value = (
             b"data"
         )
-        mock_wallet.provider.send_transaction = AsyncMock(return_value="tx_hash_456")
+        mock_wallet.provider.send_transaction.return_value = "tx_hash_456"
 
         tx_hash = await mock_wallet.swap_token_for_usdc(1.0, "ETH")
 
@@ -97,9 +89,7 @@ async def test_swap_token_for_usdc_success(mock_wallet):
 @pytest.mark.asyncio
 async def test_swap_rpc_failure(mock_wallet):
     # Mock RPC error
-    mock_wallet.provider.send_transaction = AsyncMock(
-        side_effect=Exception("RPC Error")
-    )
+    mock_wallet.provider.send_transaction.side_effect = Exception("RPC Error")
 
     with pytest.raises(Exception, match="RPC Error"):
         await mock_wallet.swap_usdc_for_token(10.0, "ETH")
@@ -113,9 +103,7 @@ async def test_swap_insufficient_funds(mock_wallet):
     # We expect the logic to fail because of insufficient balance.
     # Note: Current implementation doesn't have an explicit check,
     # so we mock the send_transaction to raise an error
-    mock_wallet.provider.send_transaction = AsyncMock(
-        side_effect=Exception("Insufficient Funds")
-    )
+    mock_wallet.provider.send_transaction.side_effect = Exception("Insufficient Funds")
 
     with pytest.raises(Exception, match="Insufficient Funds"):
         await mock_wallet.swap_usdc_for_token(10.0, "ETH")
@@ -126,13 +114,10 @@ async def test_swap_decimal_precision(mock_wallet):
     # Test that 1.23456789 USDC is truncated to 1.234567 (6 decimals)
     with (
         patch("src.services.evm_wallet.Web3") as mock_web3,
-        patch(
-            "src.services.evm_wallet.Web3.to_checksum_address", side_effect=lambda x: x
-        ),
     ):
         mock_contract = MagicMock()
         mock_web3.return_value.eth.contract.return_value = mock_contract
-        mock_wallet.provider.send_transaction = AsyncMock(return_value="tx_hash")
+        mock_wallet.provider.send_transaction.return_value = "tx_hash"
 
         await mock_wallet.swap_usdc_for_token(1.23456789, "ETH")
 
@@ -145,9 +130,6 @@ async def test_swap_decimal_precision(mock_wallet):
 async def test_swap_deadline_expiry(mock_wallet):
     with (
         patch("src.services.evm_wallet.Web3") as mock_web3,
-        patch(
-            "src.services.evm_wallet.Web3.to_checksum_address", side_effect=lambda x: x
-        ),
         patch("asyncio.get_event_loop") as mock_loop,
     ):
         # Set loop time to 0, deadline will be 600
@@ -155,14 +137,12 @@ async def test_swap_deadline_expiry(mock_wallet):
 
         mock_contract = MagicMock()
         mock_web3.return_value.eth.contract.return_value = mock_contract
-        mock_wallet.provider.send_transaction = AsyncMock(return_value="tx_hash")
+        mock_wallet.provider.send_transaction.return_value = "tx_hash"
 
         await mock_wallet.swap_usdc_for_token(10.0, "ETH")
 
         # Verify deadline is 600
         args, kwargs = mock_contract.encode_abi.call_args
-        # print(f"DEBUG args: {args}")
-        # print(f"DEBUG kwargs: {kwargs}")
         assert args[1][0][4] == 600
 
 

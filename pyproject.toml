@@ -16,6 +16,7 @@ dependencies = [
     "python-dotenv",
     "httpx>=0.28.1",
     "base58>=2.1.1",
+    "aiosqlite>=0.22.1",
 ]
 
 [dependency-groups]

@@ -29,6 +29,7 @@ from src.constants.evm import (
     USDC_CONTRACTS,
 )
 from src.services.base_wallet import BaseWallet
+from src.utils.retry import retry_async
 
 logger = logging.getLogger(__name__)
 
@@ -154,30 +155,48 @@ class EvmWallet(BaseWallet):
         Fetches native and USDC balances for the EVM wallet.
         """
         try:
-            native_balance = float(self.provider.get_balance() or 0.0) / 10**18
+            native_balance = await self._get_native_balance()
+        except Exception:
+            native_balance = 0.0
+
+        try:
+            usdc_balance = await self._get_usdc_balance()
+        except Exception:
+            usdc_balance = 0.0
+
+        return {"native": native_balance, "usdc": usdc_balance}
+
+    @retry_async(retries=3, delay=2.0)
+    async def _get_native_balance(self) -> float:
+        """Helper to fetch native balance with retry."""
+        try:
+            native_balance_raw = await asyncio.to_thread(self.provider.get_balance)
+            return float(native_balance_raw or 0.0) / 10**18
         except Exception as e:
             logger.error(
                 "Failed to fetch native balance for %s: %s", self.network_id, e
             )
-            return {"native": 0.0, "usdc": 0.0}
+            raise
 
-        usdc_balance = 0.0
+    @retry_async(retries=3, delay=2.0)
+    async def _get_usdc_balance(self) -> float:
+        """Helper to fetch USDC balance with retry."""
         usdc_address = USDC_CONTRACTS.get(self.network_id)
-        if usdc_address:
-            try:
-                balance_units = self.provider.read_contract(
-                    contract_address=Web3.to_checksum_address(usdc_address),
-                    abi=ERC20_ABI,
-                    function_name="balanceOf",
-                    args=[Web3.to_checksum_address(self.get_address())],
-                )
-                usdc_balance = float(balance_units) / 10**6
-            except Exception as e:
-                logger.error(
-                    "Failed to fetch USDC balance for %s: %s", self.network_id, e
-                )
+        if not usdc_address:
+            return 0.0
 
-        return {"native": native_balance, "usdc": usdc_balance}
+        try:
+            balance_units = await asyncio.to_thread(
+                self.provider.read_contract,
+                contract_address=Web3.to_checksum_address(usdc_address),
+                abi=ERC20_ABI,
+                function_name="balanceOf",
+                args=[Web3.to_checksum_address(self.get_address())],
+            )
+            return float(balance_units) / 10**6
+        except Exception as e:
+            logger.error("Failed to fetch USDC balance for %s: %s", self.network_id, e)
+            raise
 
     async def swap_usdc_for_token(self, amount_usdc: float, token_symbol: str) -> str:
         """
@@ -202,7 +221,10 @@ class EvmWallet(BaseWallet):
         # 1. Approve Router to spend USDC
         logger.info("Approving USDC spend...")
         try:
-            await self.provider.send_transaction(
+            # SDK send_transaction is known to conflict with main loop.
+            # Using asyncio.to_thread to safely isolate its execution.
+            await asyncio.to_thread(
+                self.provider.send_transaction,
                 {
                     "to": Web3.to_checksum_address(usdc_address),
                     "data": Web3()
@@ -211,16 +233,13 @@ class EvmWallet(BaseWallet):
                         "approve",
                         [Web3.to_checksum_address(router_address), amount_in_units],
                     ),
-                }
+                },
             )
         except Exception as e:
             logger.error("Failed to approve USDC spend: %s", e)
             raise
 
         # 2. Execute Swap
-        # Note: We use the SwapRouter's exactInputSingle method.
-        # This requires the input token to be ERC-20 compliant.
-        # For USDC -> Native swaps, we swap USDC for the WETH/WAVAX wrapper.
         deadline = int(asyncio.get_event_loop().time() + 600)  # 10 minutes
         params = [
             Web3.to_checksum_address(usdc_address),
@@ -234,13 +253,14 @@ class EvmWallet(BaseWallet):
         ]
 
         try:
-            tx_hash = await self.provider.send_transaction(
+            tx_hash = await asyncio.to_thread(
+                self.provider.send_transaction,
                 {
                     "to": Web3.to_checksum_address(router_address),
                     "data": Web3()
                     .eth.contract(abi=ROUTER_ABI)
                     .encode_abi("exactInputSingle", [params]),
-                }
+                },
             )
             return f"evm-{self.network_id}-tx-{tx_hash}"
         except Exception as e:
@@ -267,9 +287,6 @@ class EvmWallet(BaseWallet):
 
         amount_in_units = int(amount_token * 10**18)
 
-        # Note: To swap Native tokens (ETH/AVAX) on Uniswap V3, we pass them
-        # as 'value' to the router and use the native wrapper address in the path.
-        # The SwapRouter handles the wrapping of msg.value automatically.
         deadline = int(asyncio.get_event_loop().time() + 600)
         params = [
             Web3.to_checksum_address(native_wrapper),
@@ -283,19 +300,49 @@ class EvmWallet(BaseWallet):
         ]
 
         try:
-            tx_hash = await self.provider.send_transaction(
+            tx_hash = await asyncio.to_thread(
+                self.provider.send_transaction,
                 {
                     "to": Web3.to_checksum_address(router_address),
-                    "value": amount_in_units,  # Passing Native tokens directly
+                    "value": amount_in_units,
                     "data": Web3()
                     .eth.contract(abi=ROUTER_ABI)
                     .encode_abi("exactInputSingle", [params]),
-                }
+                },
             )
             return f"evm-{self.network_id}-tx-{tx_hash}"
         except Exception as e:
             logger.error("Failed to execute Token -> USDC swap: %s", e)
             raise
+
+    @retry_async(retries=3, delay=1.0)
+    async def get_transaction_status(self, tx_hash: str) -> Optional[str]:
+        """
+        Checks the status of an EVM transaction.
+        """
+        # Format is evm-{network_id}-tx-{hash}
+        parts = tx_hash.split("-tx-")
+        clean_hash = parts[-1]
+
+        # Basic validation to avoid unnecessary retries on junk data
+        if not clean_hash.startswith("0x") or len(clean_hash) < 64:
+            logger.error("Fundamentally invalid EVM transaction hash: %s", clean_hash)
+            return "FAILED"
+
+        try:
+            # receipt lookup can also cause loop issues or block.
+            receipt = await asyncio.to_thread(
+                self.provider.get_transaction_receipt, clean_hash
+            )
+            if receipt:
+                if receipt.get("status") == 1:
+                    return "CONFIRMED"
+                return "FAILED"
+        except Exception as e:
+            logger.debug("EVM receipt not found for %s: %s", clean_hash, e)
+            raise  # Re-raise to trigger retry
+
+        return None
 
     def get_address(self) -> str:
         """Returns the address of the EVM wallet."""
