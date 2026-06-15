@@ -3,7 +3,7 @@ Abstract base class for multi-chain wallets.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict
+from typing import Dict, Optional
 
 
 class BaseWallet(ABC):
@@ -33,4 +33,11 @@ class BaseWallet(ABC):
     async def swap_token_for_usdc(self, amount_token: float, token_symbol: str) -> str:
         """
         Swaps a token for USDC. Returns transaction hash/id.
+        """
+
+    @abstractmethod
+    async def get_transaction_status(self, tx_hash: str) -> Optional[str]:
+        """
+        Checks the status of a transaction on-chain.
+        Returns 'CONFIRMED', 'FAILED', or None if still pending/unknown.
         """

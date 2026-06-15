@@ -3,7 +3,7 @@ Orchestrator for managing multi-chain wallets.
 """
 
 import logging
-from typing import Dict
+from typing import Dict, Optional
 
 from src.config import Config
 from src.services.base_wallet import BaseWallet
@@ -15,20 +15,42 @@ logger = logging.getLogger(__name__)
 
 class WalletManager:
     """
-    Orchestrates wallet lifecycle across supported chains.
+    Orchestrates wallet lifecycle across supported chains (Singleton).
     """
+
+    _instance: Optional["WalletManager"] = None
+
+    def __new__(cls) -> "WalletManager":
+        if cls._instance is None:
+            cls._instance = super(WalletManager, cls).__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    @classmethod
+    def _reset(cls) -> None:
+        """
+        Resets the singleton instance (primarily for testing).
+        """
+        cls._instance = None
 
     def __init__(self) -> None:
         """
         Initialize the WalletManager container.
         """
+        if getattr(self, "_initialized", False):
+            return
         logger.info("Initializing WalletManager container...")
         self.wallets: Dict[str, BaseWallet] = {}
+        self._initialized = True
 
     async def initialize(self) -> None:
         """
         Asynchronously load/create wallets for all chains.
         """
+        if self.wallets:
+            logger.info("WalletManager already initialized. Skipping...")
+            return
+
         logger.info("Asynchronously loading wallets for all chains...")
 
         # Instantiate wallets

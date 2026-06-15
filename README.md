@@ -43,7 +43,7 @@ Real market data is used to generate trading signals, while all trade execution 
 ### Infrastructure
 
 - Python 3.12+
-- SQLite (for workflow persistence)
+- **SQLite (aiosqlite)** for persistent trade tracking
 
 ---
 
@@ -54,32 +54,41 @@ The system uses a decoupled LangGraph architecture to separate reasoning from ex
 
 - **Planner Agent (`src/agents/planner.py`):** Uses Groq (Llama 3) to analyze market data and portfolio state, generating a structured `TradePlan`.
 - **Risk Validator (`src/services/risk_validator.py`):** A deterministic node that enforces balance constraints, maximum trade limits, and slippage guardrails.
-- **Trade Executor (`src/workflows/nodes.py`):** Dispatches validated actions to chain-specific wallet adapters.
+- **Trade Executor (`src/workflows/nodes.py`):** Dispatches validated actions to chain-specific wallet adapters and records them in the database.
 
-### Prompts & State
-- **Prompts:** Managed in `src/prompts/` to ensure clean separation of LLM instructions from logic.
-- **State:** Strongly typed `AgentState` defined in `src/workflows/state.py`.
-
-**Note on Market Data:** The `MarketWatcher` service aggregates price snapshots from all configured providers before emitting a single consolidated signal. This ensures that the agent is triggered only once per polling interval with a complete view of the market, effectively preventing redundant agent executions and inefficient resource usage.
+### Background Services
+- **Market Watcher (`src/services/market_watcher.py`):** Aggregates price snapshots and triggers the agent loop.
+- **Transaction Monitor (`src/services/transaction_monitor.py`):** A parallel service that polls the blockchain to update the status of `PENDING` trades in SQLite.
 
 ---
 
 ## Design Principles
 
-### Plan First, Execute Second
-Agents generate structured plans using **Pydantic** models. Executors are responsible for carrying out these plans deterministically.
+### Stateless Non-Blocking Execution
+To handle flaky testnets, the agent loop completes immediately after submitting a transaction. The `TransactionMonitor` handles the asynchronous confirmation, allowing the agent to stay responsive to new signals.
 
-### Event-Driven Workflows
-Workflows are state machines resumed by events (e.g., `TX_CONFIRMED`, `MARKET_SIGNAL`). They persist state and do not remain active while waiting.
+### Singleton Wallet Management
+The `WalletManager` is a singleton ensuring that wallet keys and initialized providers are shared across the application, preventing redundant initialization and race conditions.
 
-### Unified Wallet Interface
-All multi-chain wallets inherit from the `BaseWallet` abstract class. This guarantees that every wallet implements identical interfaces for retrieving public addresses (`get_address() -> str`) and balances (`get_balances() -> Dict[str, float]`). The `WalletManager` acts as the orchestrator and holds strongly typed mappings of network IDs to these `BaseWallet` instances.
+### SDK Thread Isolation
+Calls to loop-heavy SDKs (like Coinbase AgentKit) are offloaded to separate threads using `asyncio.to_thread` to prevent event loop conflicts.
 
-### Deterministic Services
-The Wallet Manager, Chain Adapters, and Portfolio Manager must remain deterministic and free of LLM reasoning.
+### Centralized Persistence
+All SQL queries are centralized in `src/persistence/queries.py` and use parameterized queries to prevent injection from LLM-generated rationale strings.
 
-### Three-Wallet USDC Strategy
-The system maintains a USDC "bank" on each supported chain. All trades are simulated by swapping USDC for assets and back, ensuring a consistent base currency for performance tracking. Solana balances are fetched from the devnet token account, and EVM balances are queried programmatically from the official Sepolia and Avalanche Fuji USDC token contract addresses using `read_contract` calls.
+---
+
+## Wallet Management & Capital
+
+### Three-Wallet Strategy
+The system maintains three distinct wallets, one for each supported chain.
+- Each wallet uses **USDC** as its base "bank" currency.
+- **Gas Requirements:** Each wallet must be funded with a small amount of the chain's native testnet token (SOL, ETH, or AVAX) to cover gas fees for swaps.
+- Trades are simulated by swapping USDC for the target asset and back.
+
+### Initialization: Two-Stage Polling
+1. **Stage 1: Funding Poll:** The main script polls for native/USDC balances. It will wait indefinitely until at least one wallet is funded. Instructions are provided in `WALLETS.md`.
+2. **Stage 2: Market Poll:** Once funds are detected, the system enters its active loop, polling market data providers for signals to trigger the Planner Agent.
 
 ---
 
@@ -104,44 +113,16 @@ Generate a visual map of the trading graph:
 make graph
 ```
 
-### Interactive Debugging
-Run the LangGraph dev server to use LangGraph Studio:
+### Run Full System
 ```bash
-uv run langgraph dev
+uv run src/workflows/main.py
 ```
 
 ### Run Quality Checks
-
 ```bash
-# Run comprehensive format check, ruff check, pylint, mypy, pytest, and codespell
+# Formatter, Ruff, Pylint (10/10), Mypy, and Pytest
 make check
 ```
-
-### Run Tests
-
-```bash
-# Run pytest
-make test
-```
-
-### Integration Testing: Swaps
-
-You can verify the swap logic on each supported chain (Solana Devnet, Ethereum Sepolia, Avalanche Fuji) using the `test_swaps.py` script. This performs a real on-chain transaction (Memo on Solana, Swap on EVM).
-
-```bash
-# Solana
-uv run scripts/test_swaps.py --chain solana --direction buy --amount 0.001 --asset SOL
-
-# Ethereum Sepolia
-uv run scripts/test_swaps.py --chain sepolia --direction buy --amount 1.0 --asset ETH
-
-# Avalanche Fuji
-uv run scripts/test_swaps.py --chain avalanche-fuji --direction buy --amount 1.0 --asset AVAX
-```
-
-### Configuration
-
-Ensure your `.env` file is configured with the necessary API keys and RPC URLs (especially for reliable Solana Devnet connectivity).
 
 ---
 
@@ -149,16 +130,13 @@ Ensure your `.env` file is configured with the necessary API keys and RPC URLs (
 
 ### Roadmap
 - **Phase 1: Foundation** (Completed)
-- **Phase 2: Agentic Trading** (Completed - Functional Chain Verified)
-- **Phase 3: Real Execution & Persistence** (Next)
-- **Phase 4: Advanced Features**
+- **Phase 2: Agentic Trading** (Completed)
+- **Phase 3: Real Execution & Persistence** (Completed)
+- **Phase 4: Advanced Features** (Next)
 
-### Backlog
-- **Prod-Readiness Assessment:**
-  - **Transaction Confirmation:** Currently, the system returns a hash as soon as the transaction is sent. In production, add logic to wait for the transaction to be confirmed/finalized before proceeding with the next step in the workflow.
-  - **Retry Logic:** Testnet RPCs are notoriously flaky. Implement exponential backoff retries for all blockchain interactions to prevent transient failures from crashing the agent.
-  - **Position Tracking:** Implement a persistence layer (e.g., updating a SQLite DB) to track open positions and realized gains/losses across sessions.
-- **Market Data Resilience:** Implement a Binance API fallback in the `MarketWatcher` to ensure service continuity if CoinGecko experiences downtime.
-- **RPC Connectivity:** Introduce automatic RPC endpoint fallbacks for chain connectivity to mitigate bottlenecks and ensure reliable transaction submission during high network congestion.
-- **Agent Enhancements:** Integrate real-time sentiment analysis, expand asset support, and implement advanced risk management strategies for better decision-making.
-- **Backtesting & Simulation:** Develop a backtesting engine to evaluate strategies against historical data before deployment on testnets.
+### Backlog (v2)
+- **Stateful Resume:** Utilize LangGraph checkpointers to interrupt and resume specific workflow threads upon transaction confirmation.
+- **Position Cost-Basis Tracking:** Extend SQLite to track realized/unrealized PnL based on cost-basis stored in the DB.
+- **Market Data Resilience:** Implement a Binance API fallback in the `MarketWatcher`.
+- **RPC Connectivity:** Automatic RPC endpoint fallbacks for chain connectivity.
+- **Backtesting & Simulation:** Develop an engine to evaluate strategies against historical data.

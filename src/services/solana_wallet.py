@@ -4,7 +4,7 @@ Service for managing Solana-specific wallet operations.
 
 import logging
 import os
-from typing import Dict
+from typing import Dict, Optional
 
 import base58
 from solana.rpc.async_api import AsyncClient
@@ -16,10 +16,12 @@ from solders.instruction import Instruction  # type: ignore
 from solders.keypair import Keypair  # type: ignore
 from solders.message import Message  # type: ignore
 from solders.pubkey import Pubkey
+from solders.signature import Signature
 from solders.transaction import Transaction  # type: ignore
 
 from src.constants.solana import MEMO_PROGRAM_ID, USDC_MINT
 from src.services.base_wallet import BaseWallet
+from src.utils.retry import retry_async
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +91,7 @@ class SolanaWallet(BaseWallet):
 
         return keypair
 
+    @retry_async(retries=3, delay=2.0)
     async def get_balances(self) -> Dict[str, float]:
         """
         Fetches balances using the async client.
@@ -117,7 +120,7 @@ class SolanaWallet(BaseWallet):
                     usdc_balance = float(balance_res.value.ui_amount)
         except Exception as e:
             logger.error("Failed to fetch Solana balances: %s", e)
-            return {"native": 0.0, "usdc": 0.0}
+            raise  # Re-raise to trigger retry
 
         return {"native": sol_balance, "usdc": usdc_balance}
 
@@ -170,6 +173,35 @@ class SolanaWallet(BaseWallet):
         """
         memo_text = f"SWAP_INTENT: SELL {amount_token} {token_symbol} FOR USDC"
         return await self._send_memo(memo_text)
+
+    @retry_async(retries=3, delay=1.0)
+    async def get_transaction_status(self, tx_hash: str) -> Optional[str]:
+        """
+        Checks the status of a Solana transaction.
+        """
+        # Remove our custom prefix if present
+        clean_hash = tx_hash.replace("solana-tx-", "")
+
+        try:
+            sig = Signature.from_string(clean_hash)
+        except ValueError:
+            logger.error("Fundamentally invalid Solana signature: %s", clean_hash)
+            return "FAILED"
+
+        try:
+            res = await self.client.get_signature_statuses([sig])
+
+            if res.value and res.value[0]:
+                status = res.value[0]
+                if status.err:
+                    return "FAILED"
+                if status.confirmation_status in ["confirmed", "finalized"]:
+                    return "CONFIRMED"
+        except Exception as e:
+            logger.error("Failed to fetch Solana transaction status from RPC: %s", e)
+            raise  # Re-raise to trigger retry
+
+        return None
 
     def get_address(self) -> str:
         """Returns the public address."""

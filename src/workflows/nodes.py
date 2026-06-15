@@ -8,6 +8,7 @@ from langgraph.graph import END
 
 from src.agents.planner import PlannerAgent
 from src.models.trading import TradePlan
+from src.persistence.trade_history import TradeHistory
 from src.services.risk_validator import RiskValidator
 from src.services.wallet_manager import WalletManager
 from src.workflows.state import AgentState
@@ -23,17 +24,20 @@ async def planner_node(state: AgentState) -> AgentState:
     balances = state.get("portfolio_balances")
 
     if snapshot and balances:
-        print(f"\n[PLANNER] Analyzing snapshot from {snapshot.source}...")
+        logger.info("Analyzing snapshot from %s...", snapshot.source)
         agent = PlannerAgent()
         try:
             plan = await agent.plan(snapshot, balances)
             state["plan"] = plan
-            print(f"[PLANNER] Rationale: {plan.rationale}")
-            print(f"[PLANNER] Risk Level: {plan.risk_level}")
+            logger.info("Plan rationale: %s", plan.rationale)
+            logger.info("Plan risk level: %s", plan.risk_level)
             for action in plan.actions:
-                print(
-                    f"  - {action.direction.upper()} {action.amount} "
-                    f"{action.asset} on {action.chain}"
+                logger.info(
+                    "Action proposed: %s %s %s on %s",
+                    action.direction.upper(),
+                    action.amount,
+                    action.asset,
+                    action.chain,
                 )
         except Exception as e:
             logger.error("Error in PlannerAgent: %s", e)
@@ -41,7 +45,7 @@ async def planner_node(state: AgentState) -> AgentState:
                 rationale=f"Error generating plan: {e}", risk_level="high"
             )
     else:
-        print("\n[PLANNER] Missing market data or balances.")
+        logger.warning("Missing market data or balances for planning.")
 
     state["next_step"] = "validator"
     return state
@@ -51,12 +55,12 @@ def validator_node(state: AgentState) -> AgentState:
     """
     Validate the proposed plan against deterministic constraints.
     """
-    print("[VALIDATOR] Validating plan constraints...")
+    logger.info("Validating plan constraints...")
     plan = state.get("plan")
     balances = state.get("portfolio_balances")
 
     if not plan or not balances:
-        print("[VALIDATOR] No plan or balances to validate.")
+        logger.warning("No plan or balances to validate.")
         state["approved_actions"] = []
         state["next_step"] = "executor"
         return state
@@ -65,11 +69,14 @@ def validator_node(state: AgentState) -> AgentState:
     approved, status = rv.validate(plan, balances)
 
     state["approved_actions"] = approved
-    print(f"[VALIDATOR] {status}")
+    logger.info("Validation result: %s", status)
     for action in approved:
-        print(
-            f"  - APPROVED: {action.direction.upper()} {action.amount} "
-            f"{action.asset} on {action.chain}"
+        logger.info(
+            "Action APPROVED: %s %s %s on %s",
+            action.direction.upper(),
+            action.amount,
+            action.asset,
+            action.chain,
         )
 
     state["next_step"] = "executor"
@@ -81,26 +88,41 @@ async def executor_node(state: AgentState) -> AgentState:
     Execute the validated plan using chain-specific adapters.
     """
     actions = state.get("approved_actions", [])
+    plan = state.get("plan")
     if not actions:
-        print("[EXECUTOR] No actions to execute.")
+        logger.info("No approved actions to execute.")
         state["next_step"] = END
         return state
 
-    print(f"[EXECUTOR] Executing {len(actions)} actions...")
+    logger.info("Executing %d approved actions...", len(actions))
 
-    # In a real LangGraph setup, we'd pass the WalletManager in config/state
+    # Access Singleton WalletManager
     wm = WalletManager()
     await wm.initialize()
 
     for action in actions:
         try:
-            print(f"[EXECUTOR] Dispatching {action.direction} on {action.chain}...")
+            logger.info("Dispatching %s on %s...", action.direction, action.chain)
             tx_hash = await wm.execute_swap(
                 action.chain, action.direction, action.amount, action.asset
             )
-            print(f"[EXECUTOR] Success! TX: {tx_hash}")
+            logger.info("Execution successful. TX: %s", tx_hash)
+
+            # Persist the trade as PENDING
+            await TradeHistory.add_trade(
+                tx_hash=tx_hash,
+                chain=action.chain,
+                asset=action.asset,
+                direction=action.direction,
+                amount=action.amount,
+                status="PENDING",
+                rationale=plan.rationale if plan else None,
+            )
+
         except Exception as e:
-            print(f"[EXECUTOR] Failed to execute {action.asset} on {action.chain}: {e}")
+            logger.error(
+                "Failed to execute %s on %s: %s", action.asset, action.chain, e
+            )
 
     state["next_step"] = END
     return state
