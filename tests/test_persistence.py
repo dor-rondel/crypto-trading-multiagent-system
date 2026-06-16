@@ -28,7 +28,7 @@ async def test_workflow_persistence_and_resumption():
 
     # Mock all external dependencies
     with (
-        patch("src.workflows.nodes.PlannerAgent") as mock_planner,
+        patch("src.workflows.nodes.AggregatorAgent") as mock_planner,
         patch("src.workflows.nodes.RiskValidator") as mock_validator,
         patch("src.workflows.nodes.WalletManager") as mock_wm,
     ):

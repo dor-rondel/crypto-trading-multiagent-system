@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.agents.planner import PlannerAgent
+from src.agents.aggregator import AggregatorAgent
 from src.events.market_signal import AssetPrice, MarketSnapshot
 from src.models.trading import TradeAction, TradeDirection, TradePlan
 
@@ -13,16 +13,16 @@ async def test_planner_agent_plan():
     snapshot = MarketSnapshot(source="binance", assets={"SOL": AssetPrice(price=150.0)})
     balances = {"solana": {"usdc": 200.0, "native": 1.0}}
 
-    # Mock PlannerAgent to avoid needing a real GROQ_API_KEY
+    # Mock AggregatorAgent to avoid needing a real GROQ_API_KEY
     with (
         patch("os.getenv", return_value="dummy_key"),
-        patch("src.agents.planner.ChatGroq"),
-        patch("src.agents.planner.PLANNER_PROMPT_TEMPLATE") as mock_prompt,
+        patch("langchain_groq.ChatGroq"),
+        patch("src.agents.aggregator.AGGREGATOR_PROMPT_TEMPLATE") as mock_prompt,
     ):
         mock_chain = MagicMock()
         mock_prompt.__or__.return_value = mock_chain
 
-        agent = PlannerAgent(model_name="test-model")
+        agent = AggregatorAgent(model_name="test-model")
 
         # Configure the mock chain's ainvoke method to return the TradePlan
         mock_chain.ainvoke = AsyncMock(

@@ -84,6 +84,11 @@ async def main() -> None:
                 "next_step": "",
                 "plan": None,
                 "approved_actions": [],
+                "positions": None,
+                "gas_report": None,
+                "news_report": None,
+                "trend_report": None,
+                "performance_report": None,
             }
         )
 

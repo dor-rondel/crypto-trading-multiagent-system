@@ -8,7 +8,7 @@ from typing import Dict, List, Optional
 import httpx
 
 from src.events.market_signal import AssetPrice, MarketSnapshot
-from src.services.market_data.base_provider import BaseMarketProvider
+from src.tools.market_data.base_provider import BaseMarketProvider
 
 logger = logging.getLogger(__name__)
 

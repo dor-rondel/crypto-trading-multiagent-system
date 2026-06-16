@@ -7,9 +7,9 @@ import logging
 from typing import Awaitable, Callable, List, Optional
 
 from src.events.market_signal import MarketSnapshot
-from src.services.market_data.base_provider import BaseMarketProvider
-from src.services.market_data.binance_provider import BinanceProvider
-from src.services.market_data.coingecko_provider import CoinGeckoProvider
+from src.tools.market_data.base_provider import BaseMarketProvider
+from src.tools.market_data.binance_provider import BinanceProvider
+from src.tools.market_data.coingecko_provider import CoinGeckoProvider
 
 logger = logging.getLogger(__name__)
 
