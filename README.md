@@ -140,10 +140,7 @@ make check
 - **Phase 4: Advanced Features** (Next)
 
 ### Backlog (v2)
-- **Parallel Subagent Refactor:** Transition to a multi-analyst architecture (In Progress).
-- **Position Cost-Basis Tracking:** Extend SQLite to track realized/unrealized PnL based on cost-basis stored in the DB (Completed).
 - **Contemporary News Integration:** Integrate a news aggregator (e.g., CryptoPanic) to provide macro context to the Aggregator.
-- **Gas Price Tracking:** Monitor multi-chain gas prices/priority fees to optimize transaction timing.
 - **Stateful Resume:** Utilize LangGraph checkpointers (SqliteSaver) to interrupt and resume specific workflow threads upon transaction confirmation.
 - **Technical Analysis Tooling:** Pre-calculate indicators (RSI, MACD, Moving Averages) to provide compressed technical context to the LLM.
 - **RPC Connectivity:** Automatic RPC endpoint fallbacks for chain connectivity.
