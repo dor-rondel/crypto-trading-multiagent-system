@@ -2,7 +2,7 @@
 Definition of the agent state for LangGraph.
 """
 
-from typing import Annotated, Dict, List, Optional, TypedDict
+from typing import Annotated, Any, Dict, List, Optional, TypedDict
 
 from src.events.market_signal import MarketSnapshot
 from src.models.trading import TradeAction, TradePlan
@@ -19,3 +19,4 @@ class AgentState(TypedDict):
     plan: Optional[TradePlan]
     approved_actions: List[TradeAction]
     next_step: str
+    positions: Optional[Dict[str, Any]]
