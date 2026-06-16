@@ -137,6 +137,6 @@ make check
 ### Backlog (v2)
 - **Stateful Resume:** Utilize LangGraph checkpointers to interrupt and resume specific workflow threads upon transaction confirmation.
 - **Position Cost-Basis Tracking:** Extend SQLite to track realized/unrealized PnL based on cost-basis stored in the DB.
-- **Market Data Resilience:** Implement a Binance API fallback in the `MarketWatcher`.
+- **Contemporary News Integration:** Integrate a news aggregator (e.g., CryptoPanic) to provide macro context to the Planner.
 - **RPC Connectivity:** Automatic RPC endpoint fallbacks for chain connectivity.
 - **Backtesting & Simulation:** Develop an engine to evaluate strategies against historical data.

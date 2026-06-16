@@ -12,6 +12,8 @@ PLANNER_SYSTEM_PROMPT = (
     "- Focus on the 'Three-Wallet USDC Strategy': swap USDC for assets and back.\n"
     "- Supported chains: solana, sepolia, avalanche-fuji.\n"
     "- Only trade ETH, SOL, or AVAX.\n"
+    "- Use the provided 'history' (OHLCV) to identify short-term trends "
+    "(e.g., higher highs, lower lows, or breakouts).\n"
     "- If no clear opportunity exists, return an empty list of actions "
     "with a rationale.\n\n"
     "CONSTRAINTS:\n"
