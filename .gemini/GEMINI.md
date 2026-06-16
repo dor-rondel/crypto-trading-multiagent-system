@@ -47,9 +47,11 @@ Executors perform blockchain operations.
 
 #### Technical Rationale: Solana Memo Program
 On Solana, the system uses the **Memo Program** (`MemoSq9gHqT9VkU4beuy66Gf364aJ6Eic52pD34j3K`) to record trade intents (e.g., `"BUY 1 SOL with 145 USDC"`) directly on-chain.
+- **Verifiability:** Every agent decision results in a real transaction hash and a verifiable on-chain record that can be audited via block explorers. 
+- **Economic Simulation:** It consumes real Devnet SOL for gas, simulating the economic impact and transaction lifecycle of trading.
 
 #### Technical Rationale: Wrapped Tokens (WETH/WAVAX)
-Protocols like Uniswap V3 require ERC-20 compliance. The system interacts with **WETH** and **WAVAX** contracts to enable seamless swaps with USDC.
+Protocols like Uniswap V3 require ERC-20 compliance. The system interacts with **WETH** and **WAVAX** contracts to enable seamless swaps with USDC while maintaining exposure to the native asset's price action.
 
 ---
 
@@ -57,23 +59,29 @@ Protocols like Uniswap V3 require ERC-20 compliance. The system interacts with *
 
 ### 1. Singleton Wallet Management
 - **Rule:** The `WalletManager` MUST be a Singleton. Access the instance via `WalletManager()`.
+- **Rationale:** Prevents redundant initialization of chain providers and ensures wallet keys are loaded only once per session, preventing race conditions.
 
 ### 2. SDK Thread Isolation
 - **Rule:** All calls to loop-managing SDKs (specifically **Coinbase AgentKit/CDP**) MUST be wrapped in `asyncio.to_thread`.
+- **Rationale:** Prevents "Event loop is already running" errors caused by SDKs attempting to manage their own asyncio loops internally.
 
 ### 3. Stateless Execution Node
 - **Rule:** The `executor_node` MUST exit immediately after submitting a transaction and recording it as `PENDING` in SQLite.
+- **Rationale:** Blockchain confirmation is handled by a parallel `TransactionMonitor` service to keep the agent responsive to new market signals.
 
 ### 4. Database Safety & Economic Accountability
 - **Rule:** All SQL queries MUST be stored in `src/persistence/queries.py` and MUST use parameterized placeholders (`?`).
 - **Mandate:** Every trade MUST record `execution_price` and `cost_basis`.
+- **Rationale:** Centralizes schema management, prevents SQL injection from LLM-generated rationale strings, and ensures the agent has the necessary data for PnL calculations.
 
 ### 5. Multi-Provider Market Context
 - **Rule:** Market data aggregation SHOULD utilize multiple providers (CoinGecko + Binance) to ensure resilience.
 - **Mandate:** The agent MUST be provided with historical OHLCV data (Trends) and current position PnL context during the planning phase.
+- **Rationale:** Prevents single-point-of-failure for market data and gives the LLM the "memory" needed to identify trends and manage exit risks.
 
 ### 6. Flaky RPC Resilience
 - **Rule:** Critical blockchain operations (balances, status checks) MUST use the `@retry_async` decorator from `src/utils/retry.py`.
+- **Rationale:** Testnet RPCs are notoriously unstable; automatic retries prevent transient network issues from crashing the agent.
 
 ---
 
