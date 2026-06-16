@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.events.market_signal import MarketSnapshot
-from src.services.market_data.coingecko_provider import CoinGeckoProvider
 from src.services.market_watcher import MarketWatcher
+from src.tools.market_data.coingecko_provider import CoinGeckoProvider
 
 
 @pytest.mark.asyncio

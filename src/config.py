@@ -15,6 +15,7 @@ class Config:
     """
 
     SOLANA_RPC_URL = os.getenv("SOLANA_RPC_URL", "https://api.devnet.solana.com")
+    SEPOLIA_RPC_URL = os.getenv("ETH_SEPOLIA_RPC_URL", "https://rpc.sepolia.org")
     SEPOLIA_WALLET_DATA_FILE = os.getenv(
         "SEPOLIA_WALLET_DATA_FILE", "sepolia_wallet.json"
     )
