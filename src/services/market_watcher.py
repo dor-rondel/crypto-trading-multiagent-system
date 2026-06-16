@@ -8,6 +8,7 @@ from typing import Awaitable, Callable, List, Optional
 
 from src.events.market_signal import MarketSnapshot
 from src.services.market_data.base_provider import BaseMarketProvider
+from src.services.market_data.binance_provider import BinanceProvider
 from src.services.market_data.coingecko_provider import CoinGeckoProvider
 
 logger = logging.getLogger(__name__)
@@ -30,11 +31,11 @@ class MarketWatcher:
         Args:
             assets: List of assets to watch.
             interval: Polling interval in seconds.
-            providers: List of market data providers. Defaults to CoinGeckoProvider.
+            providers: List of market data providers. Defaults to CoinGecko and Binance.
         """
         self.assets = assets
         self.interval = interval
-        self.providers = providers or [CoinGeckoProvider()]
+        self.providers = providers or [CoinGeckoProvider(), BinanceProvider()]
         self._is_running = False
         self._callback: Optional[Callable[[MarketSnapshot], Awaitable[None]]] = None
 

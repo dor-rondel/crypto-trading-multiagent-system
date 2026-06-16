@@ -3,9 +3,22 @@ Definitions for market-related events.
 """
 
 from datetime import UTC, datetime
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class Candle(BaseModel):
+    """
+    Represents a single OHLCV candle.
+    """
+
+    timestamp: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
 
 
 class AssetPrice(BaseModel):
@@ -17,6 +30,7 @@ class AssetPrice(BaseModel):
     change_24h: Optional[float] = Field(
         None, description="24-hour price change percentage"
     )
+    history: Optional[List[Candle]] = Field(None, description="Historical OHLCV data")
 
 
 class MarketSnapshot(BaseModel):

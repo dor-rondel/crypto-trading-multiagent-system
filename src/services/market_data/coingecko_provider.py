@@ -64,6 +64,7 @@ class CoinGeckoProvider(BaseMarketProvider):
                     asset_prices[symbol] = AssetPrice(
                         price=float(prices["usd"]),
                         change_24h=float(prices.get("usd_24h_change", 0.0)),
+                        history=None,
                     )
 
             if not asset_prices:
