@@ -26,7 +26,7 @@ The system follows a strict separation between planning and execution.
 ### Modular Workflows
 
 - **Architecture:** Decouple reasoning from execution using LangGraph. Maintain separate files for nodes, state, and graph definitions.
-- **Prompts:** All LLM prompts must reside in `src/prompts/`. Do not hardcode prompts in agent classes.
+- **Prompts:** All LLM prompts must reside in `src/prompts/` and must be imported. Do not hardcode prompts in agent classes.
 - **Models:** Use Pydantic models for all inter-node communication (e.g., `TradePlan`, `TradeAction`).
 - **Validation:** Every trade plan must pass through a deterministic `RiskValidator` before execution.
 
@@ -50,7 +50,7 @@ Native gas tokens (ETH, AVAX) do not follow the ERC-20 standard.
 
 ---
 
-## Architectural Mandates (Added in v1.0)
+## Architectural Mandates (v2.0 Updates)
 
 ### 1. Singleton Wallet Management
 - **Rule:** The `WalletManager` MUST be a Singleton.
@@ -64,11 +64,17 @@ Native gas tokens (ETH, AVAX) do not follow the ERC-20 standard.
 - **Rule:** The `executor_node` MUST exit immediately after submitting a transaction and recording it as `PENDING` in SQLite.
 - **Rationale:** Blockchain confirmation is handled by a parallel `TransactionMonitor` service to keep the agent responsive to new market signals.
 
-### 4. Database Safety & Organization
+### 4. Database Safety & Economic Accountability
 - **Rule:** All SQL queries MUST be stored in `src/persistence/queries.py` and MUST use parameterized placeholders (`?`).
-- **Rationale:** Centralizes schema management and prevents SQL injection from LLM-generated rationale strings.
+- **Mandate:** Every trade MUST record `execution_price` and `cost_basis`. The system MUST maintain a verifiable trail for PnL calculations.
+- **Rationale:** Centralizes schema management, prevents SQL injection, and ensures the agent has the necessary data for self-reflection on profitability.
 
-### 5. Flaky RPC Resilience
+### 5. Multi-Provider Market Context
+- **Rule:** Market data aggregation SHOULD utilize multiple providers (CoinGecko + Binance) to ensure resilience.
+- **Mandate:** The agent MUST be provided with historical OHLCV data (Trends) and current position PnL context during the planning phase.
+- **Rationale:** Prevents single-point-of-failure for market data and gives the LLM the "memory" needed to identify trends and manage exit risks.
+
+### 6. Flaky RPC Resilience
 - **Rule:** Critical blockchain operations (balances, status checks) MUST use the `@retry_async` decorator from `src/utils/retry.py`.
 - **Rationale:** Testnet RPCs are notoriously unstable; automatic retries prevent transient network issues from crashing the agent.
 
