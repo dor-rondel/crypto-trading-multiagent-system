@@ -8,11 +8,14 @@ from langgraph.graph.message import add_messages
 
 from src.events.market_signal import MarketSnapshot
 from src.models.analysis import (
+    CorrelationReport,
     GasReport,
     LiquidityReport,
     NewsReport,
     PerformanceReport,
     TrendReport,
+    VolatilityReport,
+    WhaleReport,
 )
 from src.models.trading import TradeAction, TradePlan
 
@@ -36,3 +39,6 @@ class AgentState(TypedDict):
     trend_report: Annotated[Optional[TrendReport], lambda x, y: y]
     performance_report: Annotated[Optional[PerformanceReport], lambda x, y: y]
     liquidity_report: Annotated[Optional[LiquidityReport], lambda x, y: y]
+    correlation_report: Annotated[Optional[CorrelationReport], lambda x, y: y]
+    whale_report: Annotated[Optional[WhaleReport], lambda x, y: y]
+    volatility_report: Annotated[Optional[VolatilityReport], lambda x, y: y]

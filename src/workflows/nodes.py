@@ -8,17 +8,24 @@ from typing import Any, Dict
 from langgraph.graph import END
 
 from src.agents.aggregator import AggregatorAgent
+from src.agents.subagents.correlation_analyst import CorrelationAnalyst
 from src.agents.subagents.gas_analyst import GasAnalyst
 from src.agents.subagents.liquidity_analyst import LiquidityAnalyst
 from src.agents.subagents.news_analyst import NewsAnalyst
 from src.agents.subagents.performance_analyst import PerformanceAnalyst
 from src.agents.subagents.trend_analyst import TrendAnalyst
+from src.agents.subagents.volatility_analyst import VolatilityAnalyst
+from src.agents.subagents.whale_analyst import WhaleAnalyst
 from src.persistence.trade_history import TradeHistory
 from src.services.risk_validator import RiskValidator
 from src.services.wallet_manager import WalletManager
+from src.tools.correlation_provider import CorrelationProvider
 from src.tools.gas_tracker import GasTracker
 from src.tools.liquidity_provider import LiquidityProvider
 from src.tools.news_provider import NewsProvider
+from src.tools.technical_analysis import TechnicalAnalysis
+from src.tools.volatility_provider import VolatilityProvider
+from src.tools.whale_provider import WhaleProvider
 from src.workflows.state import AgentState
 
 logger = logging.getLogger(__name__)
@@ -56,17 +63,28 @@ async def news_analyst_node(state: AgentState) -> AgentState:
 
 
 async def trend_analyst_node(state: AgentState) -> AgentState:
-    """Evaluates technical trends."""
-    logger.info("Trend Analyst: Evaluating market history...")
+    """Evaluates technical trends using indicators."""
+    logger.info("Trend Analyst: Evaluating technical indicators...")
     snapshot = state.get("market_snapshot")
     if not snapshot:
         return state
 
+    ta_tool = TechnicalAnalysis()
+    indicators = {}
+
     try:
-        # Pass the snapshot containing history to the analyst
-        history_str = snapshot.model_dump_json()
+        for symbol, price_data in snapshot.assets.items():
+            if price_data.history:
+                indicators[symbol] = ta_tool.calculate_indicators(price_data.history)
+            else:
+                indicators[symbol] = {
+                    "price": price_data.price,
+                    "info": "No history available",
+                }
+
         analyst = TrendAnalyst()
-        report = await analyst.analyze(history_str)
+        # Pass indicators instead of raw history
+        report = await analyst.analyze(str(indicators))
         state["trend_report"] = report
     except Exception as e:
         logger.error("Trend Analyst Error: %s", e)
@@ -106,6 +124,60 @@ async def liquidity_analyst_node(state: AgentState) -> AgentState:
         state["liquidity_report"] = report
     except Exception as e:
         logger.error("Liquidity Analyst Error: %s", e)
+    return state
+
+
+async def correlation_analyst_node(state: AgentState) -> AgentState:
+    """Evaluates market correlation with BTC."""
+    logger.info("Correlation Analyst: Evaluating market regime...")
+    snapshot = state.get("market_snapshot")
+    if not snapshot:
+        return state
+
+    provider = CorrelationProvider()
+    try:
+        data = await provider.get_correlation_data(list(snapshot.assets.keys()))
+        analyst = CorrelationAnalyst()
+        report = await analyst.analyze(data)
+        state["correlation_report"] = report
+    except Exception as e:
+        logger.error("Correlation Analyst Error: %s", e)
+    return state
+
+
+async def whale_analyst_node(state: AgentState) -> AgentState:
+    """Evaluates on-chain whale movements."""
+    logger.info("Whale Analyst: Evaluating smart money flows...")
+    snapshot = state.get("market_snapshot")
+    if not snapshot:
+        return state
+
+    provider = WhaleProvider()
+    try:
+        data = await provider.get_whale_data(list(snapshot.assets.keys()))
+        analyst = WhaleAnalyst()
+        report = await analyst.analyze(data)
+        state["whale_report"] = report
+    except Exception as e:
+        logger.error("Whale Analyst Error: %s", e)
+    return state
+
+
+async def volatility_analyst_node(state: AgentState) -> AgentState:
+    """Evaluates market volatility and risk regimes."""
+    logger.info("Volatility Analyst: Evaluating risk environment...")
+    snapshot = state.get("market_snapshot")
+    if not snapshot:
+        return state
+
+    provider = VolatilityProvider()
+    try:
+        metrics = await provider.get_volatility_metrics(list(snapshot.assets.keys()))
+        analyst = VolatilityAnalyst()
+        report = await analyst.analyze(metrics)
+        state["volatility_report"] = report
+    except Exception as e:
+        logger.error("Volatility Analyst Error: %s", e)
     return state
 
 
@@ -156,6 +228,9 @@ async def aggregator_node(state: AgentState) -> AgentState:
                 trend_report=state.get("trend_report"),
                 performance_report=state.get("performance_report"),
                 liquidity_report=state.get("liquidity_report"),
+                correlation_report=state.get("correlation_report"),
+                whale_report=state.get("whale_report"),
+                volatility_report=state.get("volatility_report"),
             )
             _log_proposed_actions(state["plan"])
         except Exception as e:

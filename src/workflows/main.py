@@ -8,6 +8,7 @@ from typing import Dict
 
 from langchain_core.runnables import RunnableConfig
 
+from src.config import Config
 from src.events.market_signal import MarketSnapshot
 from src.monitoring.logging_config import setup_logging
 from src.persistence.db import init_db
@@ -54,6 +55,7 @@ async def main() -> None:
     Main entry point.
     """
     logger.info("🚀 Initializing Crypto Trading Agent...")
+    Config.validate_config()
 
     # Initialize Database
     await init_db()
