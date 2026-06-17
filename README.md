@@ -56,7 +56,7 @@ The system uses a decoupled LangGraph architecture to separate reasoning from ex
 
 #### Workflow Nodes
 - **`research_spawner`**: The entry point that fans out into parallel analysis nodes.
-- **Analyst Nodes (`gas`, `news`, `trend`, `performance`)**: Specialized subagents that run in parallel to analyze network fees, macro sentiment, technical trends, and portfolio PnL, respectively.
+- **Analyst Nodes (`gas`, `news`, `trend`, `performance`, `liquidity`)**: Specialized subagents that run in parallel to analyze network fees, macro sentiment, technical trends, portfolio PnL, and pool liquidity/slippage risks, respectively.
 - **`aggregator`**: Consumes reports from all specialized subagents to generate a final, high-conviction `TradePlan`.
 - **`validator`**: A deterministic node that enforces balance constraints, maximum trade limits, and slippage guardrails.
 - **`executor`**: Dispatches validated actions to chain-specific wallet adapters and records them in the database.
@@ -137,11 +137,13 @@ make check
 - **Phase 1: Foundation** (Completed)
 - **Phase 2: Agentic Trading** (Completed)
 - **Phase 3: Real Execution & Persistence** (Completed)
-- **Phase 4: Advanced Features** (Next)
+- **Phase 4: Advanced Intelligence & Reliability** (In Progress)
 
 ### Backlog (v2)
-- **Contemporary News Integration:** Integrate a news aggregator (e.g., CryptoPanic) to provide macro context to the Aggregator.
-- **Stateful Resume:** Utilize LangGraph checkpointers (SqliteSaver) to interrupt and resume specific workflow threads upon transaction confirmation.
-- **Technical Analysis Tooling:** Pre-calculate indicators (RSI, MACD, Moving Averages) to provide compressed technical context to the LLM.
-- **RPC Connectivity:** Automatic RPC endpoint fallbacks for chain connectivity.
-- **Backtesting & Simulation:** Develop an engine to evaluate strategies against historical data.
+- [x] **Stateful Resume:** Integrated LangGraph checkpointers (`MemorySaver`) to persist workflow state across snapshots.
+- [x] **Liquidity & Slippage Analyst:** New subagent to analyze pool depth and prevent high-impact trades.
+- [ ] **Technical Analysis Tooling:** Integrate `pandas-ta` to pre-calculate RSI, MACD, and Moving Averages for the `TrendAnalyst`.
+- [ ] **Correlation Analyst:** Subagent to monitor asset correlations (e.g., SOL/ETH vs BTC) to refine conviction.
+- [ ] **Contemporary News Integration:** Replace mock headlines with a real aggregator (e.g., CryptoPanic).
+- [ ] **RPC Connectivity:** Automatic RPC endpoint fallbacks for chain connectivity.
+- [ ] **Backtesting & Simulation:** Engine to evaluate strategies against historical data.

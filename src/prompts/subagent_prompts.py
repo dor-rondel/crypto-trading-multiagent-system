@@ -61,3 +61,18 @@ PERFORMANCE_PROMPT_TEMPLATE = ChatPromptTemplate.from_messages(
         ("human", PERFORMANCE_HUMAN_PROMPT),
     ]
 )
+
+# Liquidity Analyst Prompts
+LIQUIDITY_SYSTEM_PROMPT = (
+    "You are a Liquidity and Slippage Analyst. "
+    "Analyze pool depths and recent volume to identify execution risks.\n"
+    "Determine the risk level (LOW, MEDIUM, HIGH) and suggest maximum trade "
+    "sizes to avoid excessive price impact (slippage)."
+)
+LIQUIDITY_HUMAN_PROMPT = "Current Pool Depth & Volume: {liquidity_data}"
+LIQUIDITY_PROMPT_TEMPLATE = ChatPromptTemplate.from_messages(
+    [
+        ("system", LIQUIDITY_SYSTEM_PROMPT),
+        ("human", LIQUIDITY_HUMAN_PROMPT),
+    ]
+)

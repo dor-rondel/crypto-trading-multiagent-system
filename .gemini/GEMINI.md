@@ -83,6 +83,11 @@ Protocols like Uniswap V3 require ERC-20 compliance. The system interacts with *
 - **Rule:** Critical blockchain operations (balances, status checks) MUST use the `@retry_async` decorator from `src/utils/retry.py`.
 - **Rationale:** Testnet RPCs are notoriously unstable; automatic retries prevent transient network issues from crashing the agent.
 
+### 7. Workflow Checkpointing & State Persistence
+- **Rule:** The LangGraph workflow MUST utilize a `checkpointer` (e.g., `MemorySaver` or `SqliteSaver`).
+- **Mandate:** All graph invocations (`ainvoke`) MUST include a `thread_id` in the `config` to enable state tracking.
+- **Rationale:** Ensures the system can recover from failures or handle long-running trade lifecycles without losing context.
+
 ---
 
 ## Engineering Standards

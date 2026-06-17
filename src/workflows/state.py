@@ -7,7 +7,13 @@ from typing import Annotated, Any, Dict, List, Optional, TypedDict
 from langgraph.graph.message import add_messages
 
 from src.events.market_signal import MarketSnapshot
-from src.models.analysis import GasReport, NewsReport, PerformanceReport, TrendReport
+from src.models.analysis import (
+    GasReport,
+    LiquidityReport,
+    NewsReport,
+    PerformanceReport,
+    TrendReport,
+)
 from src.models.trading import TradeAction, TradePlan
 
 
@@ -29,3 +35,4 @@ class AgentState(TypedDict):
     news_report: Annotated[Optional[NewsReport], lambda x, y: y]
     trend_report: Annotated[Optional[TrendReport], lambda x, y: y]
     performance_report: Annotated[Optional[PerformanceReport], lambda x, y: y]
+    liquidity_report: Annotated[Optional[LiquidityReport], lambda x, y: y]

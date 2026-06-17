@@ -9,6 +9,7 @@ import httpx
 
 from src.events.market_signal import AssetPrice, MarketSnapshot
 from src.tools.market_data.base_provider import BaseMarketProvider
+from src.utils.retry import retry_async
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class CoinGeckoProvider(BaseMarketProvider):
         "USDC": "usd-coin",
     }
 
+    @retry_async(retries=3, delay=2.0, backoff=2.0)
     async def get_snapshot(self, assets: List[str]) -> Optional[MarketSnapshot]:
         """
         Fetches current prices from CoinGecko and returns a MarketSnapshot.
@@ -48,30 +50,25 @@ class CoinGeckoProvider(BaseMarketProvider):
             "include_24hr_change": "true",
         }
 
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(url, params=params)
-                response.raise_for_status()
-                data = response.json()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
 
-            asset_prices: Dict[str, AssetPrice] = {}
-            # Reverse map to get symbols back from IDs
-            id_to_symbol = {v: k for k, v in self.SYMBOL_MAP.items()}
+        asset_prices: Dict[str, AssetPrice] = {}
+        # Reverse map to get symbols back from IDs
+        id_to_symbol = {v: k for k, v in self.SYMBOL_MAP.items()}
 
-            for cg_id, prices in data.items():
-                symbol = id_to_symbol.get(cg_id)
-                if symbol:
-                    asset_prices[symbol] = AssetPrice(
-                        price=float(prices["usd"]),
-                        change_24h=float(prices.get("usd_24h_change", 0.0)),
-                        history=None,
-                    )
+        for cg_id, prices in data.items():
+            symbol = id_to_symbol.get(cg_id)
+            if symbol:
+                asset_prices[symbol] = AssetPrice(
+                    price=float(prices["usd"]),
+                    change_24h=float(prices.get("usd_24h_change", 0.0)),
+                    history=None,
+                )
 
-            if not asset_prices:
-                return None
-
-            return MarketSnapshot(assets=asset_prices, source="CoinGecko")
-
-        except Exception as e:
-            logger.error("Failed to fetch snapshot from CoinGecko: %s", e)
+        if not asset_prices:
             return None
+
+        return MarketSnapshot(assets=asset_prices, source="CoinGecko")

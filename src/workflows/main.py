@@ -6,6 +6,8 @@ import asyncio
 import logging
 from typing import Dict
 
+from langchain_core.runnables import RunnableConfig
+
 from src.events.market_signal import MarketSnapshot
 from src.monitoring.logging_config import setup_logging
 from src.persistence.db import init_db
@@ -76,21 +78,29 @@ async def main() -> None:
         Callback to trigger the workflow on new market snapshots.
         """
         logger.info("🔔 New Market Snapshot from %s", snapshot.source)
-        await trading_app.ainvoke(
-            {
-                "messages": ["New market data received"],
-                "portfolio_balances": await wm_instance.get_balances(),
-                "market_snapshot": snapshot,
-                "next_step": "",
-                "plan": None,
-                "approved_actions": [],
-                "positions": None,
-                "gas_report": None,
-                "news_report": None,
-                "trend_report": None,
-                "performance_report": None,
-            }
-        )
+
+        # Checkpointer requires a thread_id in the config
+        config: RunnableConfig = {"configurable": {"thread_id": "main_trading_loop"}}
+
+        try:
+            await trading_app.ainvoke(
+                {
+                    "messages": ["New market data received"],
+                    "portfolio_balances": await wm_instance.get_balances(),
+                    "market_snapshot": snapshot,
+                    "next_step": "",
+                    "plan": None,
+                    "approved_actions": [],
+                    "positions": None,
+                    "gas_report": None,
+                    "news_report": None,
+                    "trend_report": None,
+                    "performance_report": None,
+                },
+                config=config,
+            )
+        except Exception as e:
+            logger.error("Error in trading workflow: %s", e)
 
     watcher.on_snapshot(handle_snapshot)
 

@@ -47,3 +47,15 @@ class PerformanceReport(BaseModel):
     total_unrealized_pnl: float = Field(..., description="Total unrealized PnL in USD")
     asset_breakdown: dict = Field(..., description="PnL breakdown per asset")
     rationale: str = Field(..., description="Risk-based reasoning")
+
+
+class LiquidityReport(BaseModel):
+    """
+    Report from the Liquidity Analyst.
+    """
+
+    risk_level: str = Field(..., description="Liquidity risk level: LOW, MEDIUM, HIGH")
+    max_recommended_trade: dict = Field(
+        ..., description="Max recommended trade size per asset"
+    )
+    rationale: str = Field(..., description="Reasoning for the liquidity assessment")
