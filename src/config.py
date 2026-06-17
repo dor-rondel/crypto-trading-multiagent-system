@@ -24,10 +24,18 @@ class Config:
     AVAX_FUJI_RPC_URL = os.getenv("AVAX_FUJI_RPC_URL")
     NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 
-    # Enforce strict model configuration, skip if running tests
+    # Enforce strict model configuration
     GROQ_MODEL_NAME = os.getenv("GROQ_MODEL_NAME")
-    if not GROQ_MODEL_NAME and not os.environ.get("PYTEST_CURRENT_TEST"):
-        print(
-            "ERROR: GROQ_MODEL_NAME environment variable is not set.", file=sys.stderr
-        )
-        sys.exit(1)
+
+    @classmethod
+    def validate_config(cls) -> None:
+        """
+        Validates critical configuration.
+        Should be called at runtime, not during module-level import.
+        """
+        if not cls.GROQ_MODEL_NAME:
+            print(
+                "ERROR: GROQ_MODEL_NAME environment variable is not set.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
