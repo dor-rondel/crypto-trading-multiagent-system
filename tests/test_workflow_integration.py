@@ -1,9 +1,10 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from langgraph.graph import END
 
 from src.events.market_signal import AssetPrice, MarketSnapshot
+from src.models.trading import TradePlan
 from src.workflows.graph import create_trading_graph
 
 
@@ -29,9 +30,10 @@ async def test_trading_workflow_integration():
     ):
         # Planner mock
         mock_planner_instance = mock_planner.return_value
+        # Return a real Pydantic model instead of MagicMock to support serialization
         mock_planner_instance.plan = AsyncMock(
-            return_value=MagicMock(
-                actions=[],  # Empty actions to test flow
+            return_value=TradePlan(
+                actions=[],
                 rationale="test",
                 risk_level="low",
             )
@@ -46,7 +48,8 @@ async def test_trading_workflow_integration():
         mock_wm_instance.initialize = AsyncMock()
 
         # Run graph
-        final_state = await graph.ainvoke(initial_state)
+        config = {"configurable": {"thread_id": "test_thread"}}
+        final_state = await graph.ainvoke(initial_state, config=config)
 
         # Assertions
         assert final_state["next_step"] == END

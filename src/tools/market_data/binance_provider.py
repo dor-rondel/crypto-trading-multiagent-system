@@ -10,6 +10,7 @@ import httpx
 
 from src.events.market_signal import AssetPrice, Candle, MarketSnapshot
 from src.tools.market_data.base_provider import BaseMarketProvider
+from src.utils.retry import retry_async
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class BinanceProvider(BaseMarketProvider):
         "AVAX": "AVAXUSDT",
     }
 
+    @retry_async(retries=3, delay=1.0, backoff=2.0)
     async def get_snapshot(self, assets: List[str]) -> Optional[MarketSnapshot]:
         """
         Fetches current prices and history from Binance and returns a MarketSnapshot.
@@ -40,21 +42,16 @@ class BinanceProvider(BaseMarketProvider):
             logger.warning("No valid Binance symbols found for assets: %s", assets)
             return None
 
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                ticker_data = await self._fetch_ticker_data(client, binance_symbols)
-                history_data = await self._fetch_history_data(client, binance_symbols)
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            ticker_data = await self._fetch_ticker_data(client, binance_symbols)
+            history_data = await self._fetch_history_data(client, binance_symbols)
 
-            asset_prices = self._parse_snapshot_data(ticker_data, history_data)
+        asset_prices = self._parse_snapshot_data(ticker_data, history_data)
 
-            if not asset_prices:
-                return None
-
-            return MarketSnapshot(assets=asset_prices, source="Binance")
-
-        except Exception as e:
-            logger.error("Failed to fetch snapshot from Binance: %s", e)
+        if not asset_prices:
             return None
+
+        return MarketSnapshot(assets=asset_prices, source="Binance")
 
     async def _fetch_ticker_data(
         self, client: httpx.AsyncClient, symbols: List[str]

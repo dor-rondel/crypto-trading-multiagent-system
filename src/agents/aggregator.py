@@ -7,6 +7,7 @@ from typing import Dict, Optional, cast
 from src.events.market_signal import MarketSnapshot
 from src.models.analysis import (
     GasReport,
+    LiquidityReport,
     NewsReport,
     PerformanceReport,
     TrendReport,
@@ -34,13 +35,18 @@ class AggregatorAgent:
         news_report: Optional[NewsReport] = None,
         trend_report: Optional[TrendReport] = None,
         performance_report: Optional[PerformanceReport] = None,
+        liquidity_report: Optional[LiquidityReport] = None,
     ) -> TradePlan:
         """
         Generates a trading plan based on aggregated analyst insights.
         """
         balance_str = self._format_balances(portfolio_balances)
         reports_str = self._format_reports(
-            gas_report, news_report, trend_report, performance_report
+            gas_report,
+            news_report,
+            trend_report,
+            performance_report,
+            liquidity_report,
         )
 
         chain = AGGREGATOR_PROMPT_TEMPLATE | self.structured_llm
@@ -70,6 +76,7 @@ class AggregatorAgent:
         news: Optional[NewsReport],
         trend: Optional[TrendReport],
         perf: Optional[PerformanceReport],
+        liquidity: Optional[LiquidityReport],
     ) -> str:
         """Formats analyst reports for the prompt."""
         return (
@@ -77,4 +84,5 @@ class AggregatorAgent:
             f"NEWS: {news.model_dump_json() if news else 'N/A'}\n"
             f"TREND: {trend.model_dump_json() if trend else 'N/A'}\n"
             f"PERF: {perf.model_dump_json() if perf else 'N/A'}\n"
+            f"LIQUIDITY: {liquidity.model_dump_json() if liquidity else 'N/A'}\n"
         )

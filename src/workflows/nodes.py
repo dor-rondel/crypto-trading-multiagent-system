@@ -9,6 +9,7 @@ from langgraph.graph import END
 
 from src.agents.aggregator import AggregatorAgent
 from src.agents.subagents.gas_analyst import GasAnalyst
+from src.agents.subagents.liquidity_analyst import LiquidityAnalyst
 from src.agents.subagents.news_analyst import NewsAnalyst
 from src.agents.subagents.performance_analyst import PerformanceAnalyst
 from src.agents.subagents.trend_analyst import TrendAnalyst
@@ -16,6 +17,7 @@ from src.persistence.trade_history import TradeHistory
 from src.services.risk_validator import RiskValidator
 from src.services.wallet_manager import WalletManager
 from src.tools.gas_tracker import GasTracker
+from src.tools.liquidity_provider import LiquidityProvider
 from src.tools.news_provider import NewsProvider
 from src.workflows.state import AgentState
 
@@ -89,6 +91,24 @@ async def performance_analyst_node(state: AgentState) -> AgentState:
     return state
 
 
+async def liquidity_analyst_node(state: AgentState) -> AgentState:
+    """Evaluates pool liquidity and slippage."""
+    logger.info("Liquidity Analyst: Evaluating execution risk...")
+    snapshot = state.get("market_snapshot")
+    if not snapshot:
+        return state
+
+    provider = LiquidityProvider()
+    try:
+        metrics = await provider.get_liquidity_metrics(list(snapshot.assets.keys()))
+        analyst = LiquidityAnalyst()
+        report = await analyst.analyze(metrics)
+        state["liquidity_report"] = report
+    except Exception as e:
+        logger.error("Liquidity Analyst Error: %s", e)
+    return state
+
+
 def _format_pnl_context(positions: Dict[str, Any], snapshot: Any) -> str:
     """Helper to format PnL context for the analyst."""
     lines = []
@@ -135,6 +155,7 @@ async def aggregator_node(state: AgentState) -> AgentState:
                 news_report=state.get("news_report"),
                 trend_report=state.get("trend_report"),
                 performance_report=state.get("performance_report"),
+                liquidity_report=state.get("liquidity_report"),
             )
             _log_proposed_actions(state["plan"])
         except Exception as e:

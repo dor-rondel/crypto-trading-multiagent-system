@@ -47,15 +47,21 @@ async def test_coingecko_provider_failure():
     """
     provider = CoinGeckoProvider()
 
-    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+    with (
+        patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get,
+        patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
+    ):
         mock_res = MagicMock()
         mock_res.status_code = 500
         mock_res.raise_for_status.side_effect = Exception("API Error")
         mock_get.return_value = mock_res
 
-        snapshot = await provider.get_snapshot(["ETH"])
+        # Should raise Exception after retries
+        with pytest.raises(Exception, match="API Error"):
+            await provider.get_snapshot(["ETH"])
 
-    assert snapshot is None
+        assert mock_get.call_count == 3
+        assert mock_sleep.call_count == 2
 
     # Empty result
     with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
