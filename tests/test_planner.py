@@ -16,14 +16,27 @@ async def test_planner_agent_plan():
     # Mock AggregatorAgent to avoid needing a real GROQ_API_KEY
     with (
         patch("os.getenv", return_value="dummy_key"),
-        patch("langchain_groq.ChatGroq"),
+        patch("src.agents.aggregator.get_groq_llm"),
         patch("src.agents.aggregator.AGGREGATOR_PROMPT_TEMPLATE") as mock_prompt,
     ):
-        mock_chain = MagicMock()
-        mock_prompt.__or__.return_value = mock_chain
+        mock_llm = MagicMock()
+        with patch("src.agents.aggregator.get_groq_llm", return_value=mock_llm):
+            mock_chain = MagicMock()
+            mock_prompt.__or__.return_value = mock_chain
+            mock_chain.ainvoke = AsyncMock(
+                return_value=TradePlan(
+                    actions=[],
+                    rationale="test",
+                    risk_level="low",
+                )
+            )
 
-        agent = AggregatorAgent(model_name="test-model")
+            agent = AggregatorAgent(model_name="test-model")
+            result = await agent.plan(
+                market_snapshot=snapshot, portfolio_balances=balances
+            )
 
+            assert result.rationale == "test"
         # Configure the mock chain's ainvoke method to return the TradePlan
         mock_chain.ainvoke = AsyncMock(
             return_value=TradePlan(
