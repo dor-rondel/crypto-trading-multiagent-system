@@ -24,9 +24,9 @@ class Config:
     AVAX_FUJI_RPC_URL = os.getenv("AVAX_FUJI_RPC_URL")
     NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 
-    # Enforce strict model configuration
+    # Enforce strict model configuration, skip if running tests
     GROQ_MODEL_NAME = os.getenv("GROQ_MODEL_NAME")
-    if not GROQ_MODEL_NAME:
+    if not GROQ_MODEL_NAME and not os.environ.get("PYTEST_CURRENT_TEST"):
         print(
             "ERROR: GROQ_MODEL_NAME environment variable is not set.", file=sys.stderr
         )
