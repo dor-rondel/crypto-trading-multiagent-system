@@ -27,6 +27,7 @@ The system follows a strict separation between data acquisition, specialized ana
 
 - **Architecture:** Decouple reasoning from execution using LangGraph. Maintain separate files for nodes, state, and graph definitions.
 - **Fan-out/Fan-in:** Utilize parallel specialized subagents (Analysts) to provide context to a central Aggregator Agent.
+- **Analysts:** `gas`, `news`, `trend`, `performance`, `liquidity`, `correlation`, `whale`, `volatility`.
 - **Prompts:** All LLM prompts must reside in `src/prompts/` and must be imported. Do not hardcode prompts in agent classes.
 - **Models:** Use Pydantic models for all inter-node communication (e.g., `TradePlan`, `TradeAction`, and Analyst Reports).
 - **Validation:** Every trade plan must pass through a deterministic `RiskValidator` before execution.
@@ -34,7 +35,7 @@ The system follows a strict separation between data acquisition, specialized ana
 ### Agents vs. Tools vs. Services
 
 - **Agents (`src/agents/`):** Intelligence layer. Contains the Aggregator and specialized analysts. Analysts must only reason about data, not fetch it.
-- **Tools (`src/tools/`):** Data acquisition layer. Contains fetchers for Market Data, Gas Prices, News, etc.
+- **Tools (`src/tools/`):** Data acquisition layer. Contains fetchers for Market Data, Gas Prices, News (CryptoPanic), Liquidity, Correlation, Whale Flows, Volatility, Technical Indicators, etc.
 - **Services (`src/services/`):** Core infrastructure layer. Contains Wallet management, Risk validation, and Monitoring.
 
 ### Executors Execute Plans
@@ -75,9 +76,9 @@ Protocols like Uniswap V3 require ERC-20 compliance. The system interacts with *
 - **Rationale:** Centralizes schema management, prevents SQL injection from LLM-generated rationale strings, and ensures the agent has the necessary data for PnL calculations.
 
 ### 5. Multi-Provider Market Context
-- **Rule:** Market data aggregation SHOULD utilize multiple providers (CoinGecko + Binance) to ensure resilience.
-- **Mandate:** The agent MUST be provided with historical OHLCV data (Trends) and current position PnL context during the planning phase.
-- **Rationale:** Prevents single-point-of-failure for market data and gives the LLM the "memory" needed to identify trends and manage exit risks.
+- **Rule:** Market data aggregation SHOULD utilize multiple providers (CoinGecko + Binance + CryptoPanic) to ensure resilience.
+- **Mandate:** The agent MUST be provided with pre-calculated technical indicators (RSI, MACD, EMA) during the trend analysis phase.
+- **Rationale:** Prevents single-point-of-failure for market data and reduces LLM token usage while increasing precision for entry/exit timing.
 
 ### 6. Flaky RPC Resilience
 - **Rule:** Critical blockchain operations (balances, status checks) MUST use the `@retry_async` decorator from `src/utils/retry.py`.

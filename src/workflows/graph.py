@@ -8,6 +8,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from src.workflows.nodes import (
     aggregator_node,
+    correlation_analyst_node,
     executor_node,
     gas_analyst_node,
     liquidity_analyst_node,
@@ -15,6 +16,8 @@ from src.workflows.nodes import (
     performance_analyst_node,
     trend_analyst_node,
     validator_node,
+    volatility_analyst_node,
+    whale_analyst_node,
 )
 from src.workflows.state import AgentState
 
@@ -31,6 +34,9 @@ def create_trading_graph() -> CompiledStateGraph:
     workflow.add_node("trend_analyst", trend_analyst_node)
     workflow.add_node("performance_analyst", performance_analyst_node)
     workflow.add_node("liquidity_analyst", liquidity_analyst_node)
+    workflow.add_node("correlation_analyst", correlation_analyst_node)
+    workflow.add_node("whale_analyst", whale_analyst_node)
+    workflow.add_node("volatility_analyst", volatility_analyst_node)
     workflow.add_node("aggregator", aggregator_node)
     workflow.add_node("validator", validator_node)
     workflow.add_node("executor", executor_node)
@@ -45,6 +51,9 @@ def create_trading_graph() -> CompiledStateGraph:
     workflow.add_edge("research_spawner", "trend_analyst")
     workflow.add_edge("research_spawner", "performance_analyst")
     workflow.add_edge("research_spawner", "liquidity_analyst")
+    workflow.add_edge("research_spawner", "correlation_analyst")
+    workflow.add_edge("research_spawner", "whale_analyst")
+    workflow.add_edge("research_spawner", "volatility_analyst")
 
     # Fan-in (Aggregator waits for all analysts)
     workflow.add_edge("gas_analyst", "aggregator")
@@ -52,6 +61,9 @@ def create_trading_graph() -> CompiledStateGraph:
     workflow.add_edge("trend_analyst", "aggregator")
     workflow.add_edge("performance_analyst", "aggregator")
     workflow.add_edge("liquidity_analyst", "aggregator")
+    workflow.add_edge("correlation_analyst", "aggregator")
+    workflow.add_edge("whale_analyst", "aggregator")
+    workflow.add_edge("volatility_analyst", "aggregator")
 
     # Main chain
     workflow.add_edge("aggregator", "validator")

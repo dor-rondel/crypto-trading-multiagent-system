@@ -4,13 +4,17 @@ Aggregator agent using Groq to generate structured trading plans from analyst re
 
 from typing import Dict, Optional, cast
 
+from src.config import Config
 from src.events.market_signal import MarketSnapshot
 from src.models.analysis import (
+    CorrelationReport,
     GasReport,
     LiquidityReport,
     NewsReport,
     PerformanceReport,
     TrendReport,
+    VolatilityReport,
+    WhaleReport,
 )
 from src.models.trading import TradePlan
 from src.prompts.aggregator_prompts import AGGREGATOR_PROMPT_TEMPLATE
@@ -22,7 +26,7 @@ class AggregatorAgent:
     Aggregator agent that consumes analyst reports to generate a final trade plan.
     """
 
-    def __init__(self, model_name: str = "llama-3.3-70b-versatile"):
+    def __init__(self, model_name: str = Config.GROQ_MODEL_NAME or ""):
         self.llm = get_groq_llm(model_name=model_name)
         self.structured_llm = self.llm.with_structured_output(TradePlan)
 
@@ -36,6 +40,9 @@ class AggregatorAgent:
         trend_report: Optional[TrendReport] = None,
         performance_report: Optional[PerformanceReport] = None,
         liquidity_report: Optional[LiquidityReport] = None,
+        correlation_report: Optional[CorrelationReport] = None,
+        whale_report: Optional[WhaleReport] = None,
+        volatility_report: Optional[VolatilityReport] = None,
     ) -> TradePlan:
         """
         Generates a trading plan based on aggregated analyst insights.
@@ -47,6 +54,9 @@ class AggregatorAgent:
             trend_report,
             performance_report,
             liquidity_report,
+            correlation_report,
+            whale_report,
+            volatility_report,
         )
 
         chain = AGGREGATOR_PROMPT_TEMPLATE | self.structured_llm
@@ -77,6 +87,9 @@ class AggregatorAgent:
         trend: Optional[TrendReport],
         perf: Optional[PerformanceReport],
         liquidity: Optional[LiquidityReport],
+        correlation: Optional[CorrelationReport],
+        whale: Optional[WhaleReport],
+        volatility: Optional[VolatilityReport],
     ) -> str:
         """Formats analyst reports for the prompt."""
         return (
@@ -85,4 +98,7 @@ class AggregatorAgent:
             f"TREND: {trend.model_dump_json() if trend else 'N/A'}\n"
             f"PERF: {perf.model_dump_json() if perf else 'N/A'}\n"
             f"LIQUIDITY: {liquidity.model_dump_json() if liquidity else 'N/A'}\n"
+            f"CORRELATION: {correlation.model_dump_json() if correlation else 'N/A'}\n"
+            f"WHALE: {whale.model_dump_json() if whale else 'N/A'}\n"
+            f"VOLATILITY: {volatility.model_dump_json() if volatility else 'N/A'}\n"
         )
